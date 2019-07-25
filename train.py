@@ -15,16 +15,16 @@ import albumentations as albu
 parser = argparse.ArgumentParser()
 parser.add_argument('train_bs', type=int) 
 parser.add_argument('val_bs', type=int)
-parser.add_argument('init_epochs', type=int)
-parser.add_argument('finetune_epochs', type=int)
+parser.add_argument('epochs', type=int)
 parser.add_argument('model_file', type=str)
 parser.add_argument('--inchannels', type=int, default=3)
 parser.add_argument('--network', type=str, default="unet")
-parser.add_argument('--pretrained', type=str, default="imagenet")
+parser.add_argument('--freeze_encoder_epochs', type=int, default=0)
 parser.add_argument('--encoder', type=str, default="resnet34")
 parser.add_argument('--train_val_split', type=float, default=0.2)
 parser.add_argument('--data_frac', type=float, default=1.0)
 parser.add_argument('--imgsize', type=int, default=256)
+parser.add_argument('--from_checkpoint', type=str, default="")
 
 env = parser.parse_args()
 
@@ -32,13 +32,17 @@ encoder_name = env.encoder
 
 checkpoint_last_filename = env.model_file + "_last_cp.pth"
 checkpoint_best_filename = env.model_file + "_best_cp.pth"
-model_file_name = env.model_file + ".pth"
+
+start_from_checkpoint = False
+if env.from_checkpoint != "":
+    checkpoint = env.from_checkpoint
+    start_from_checkpoint = True
 
 train_batch_size = env.train_bs
 val_batch_size = env.val_bs
 
-pretrain_epochs = env.init_epochs
-finetune_epochs = env.finetune_epochs
+epochs = env.epochs
+freeze_encoder_epochs = env.freeze_encoder_epochs
 
 train_val_split = env.train_val_split
 data_frac = env.data_frac
@@ -46,20 +50,21 @@ data_frac = env.data_frac
 imgsize = env.imgsize
 inchannels = env.inchannels
 
-if env.pretrained == "none":
-    pretrained = None
-else:
-    pretrained = env.pretrained
+#Set always to guarantee preprocessing
+pretrained = "imagenet"
 
 network = env.network
 
 def print_parameters():
     print("Starting training")
     print("=================")
+    if start_from_checkpoint:
+        print("Starting from checkpoint: ", checkpoint)
     print("Network %s with encoder %s" % (network, encoder_name))
     print("Pretrained on %s:" % pretrained)
     print("Batch sizes: train=%i, val=%i" % (train_batch_size, val_batch_size))
-    print("Epochs:      pretrain=%i, finetune=%i" % (pretrain_epochs, finetune_epochs))
+    print("Freezing encoder for %s epochs" % freeze_encoder_epochs)
+    print("Epochs: %i" % epochs)
     print("Training validation split: %f" % train_val_split)
     if data_frac < 1:
         print("Drawing sample from full data set: %f" % data_frac)
@@ -77,14 +82,14 @@ train_transform = [
     #albu.IAAAdditiveGaussianNoise(p=0.2),
     #albu.IAAPerspective(p=0.2),
 
-    albu.OneOf(
-        [
-            albu.CLAHE(p=1),
-            albu.RandomBrightness(p=1),
-            albu.RandomGamma(p=1),
-        ],
-        p=0.5,
-    ),
+#    albu.OneOf(
+#        [
+#            albu.CLAHE(p=1),
+#            albu.RandomBrightness(p=1),
+#            albu.RandomGamma(p=1),
+#        ],
+#        p=0.5,
+#    ),
 #
 #    #albu.OneOf(
 #    #    [
@@ -112,30 +117,10 @@ def main():
     siim_df_filename = "full_metadata_df.pkl"
     df = SIIMDataFrame(pd.read_pickle(siim_df_filename))
 
-    if network == "unet":
-        model = smp.Unet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
-    elif network == "fpn":
-        model = smp.FPN(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
-    elif network == "pspnet":
-        model = smp.PSPNet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
-
     if pretrained is not None:
         preprocess_input = get_preprocessing_fn(encoder_name, pretrained=pretrained)
     else:
         preprocess_input = None
-
-    print(model)
-
-    optimizer = torch.optim.Adam([
-            {'params': model.decoder.parameters(), 'lr': 1e-4}, 
-                
-            # decrease lr for encoder in order not to permute 
-            # pre-trained weights with large gradients on training
-            # start
-            {'params': model.encoder.parameters(), 'lr': 1e-4}
-            ])
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=5)
 
     train, val = df.train_val_split(
             train_val_split, 
@@ -169,11 +154,51 @@ def main():
             shuffle=False,
             num_workers=4)
 
+    if network == "unet":
+        model = smp.Unet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
+    elif network == "fpn":
+        model = smp.FPN(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
+    elif network == "pspnet":
+        model = smp.PSPNet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
+
+    optimizer = torch.optim.Adam([
+            {'params': model.decoder.parameters(), 'lr': 1e-4}, 
+                
+            # decrease lr for encoder in order not to permute 
+            # pre-trained weights with large gradients on training
+            # start
+            {'params': model.encoder.parameters(), 'lr': 1e-4}
+            ])
+
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=5)
+
     loss = smp.utils.losses.BCEDiceLoss(eps=1.)
+
     metrics = [
                 smp.utils.metrics.IoUMetric(eps=1.),
                 smp.utils.metrics.FscoreMetric(eps=1.),
     ]
+
+    last_state_checkpoint = CheckPoint("last_state", "This is a test run")
+    best_checkpoint = CheckPoint("best", "This is a test run")
+
+    history = History(
+        metrics = ["bce_dice_loss", "iou", "f-score"],
+        aux = ["lr", "input_size", "train_mode"]
+    )
+
+    start_epoch = 0
+
+    if start_from_checkpoint:
+        cp = CheckPoint.load(checkpoint, model, optimizer, scheduler)
+        print("Using Checkpoint:")
+        print(cp.get_name_and_description())
+
+        model = cp.get_model()
+        optimizer = cp.get_optimizer()
+        scheduler = cp.get_scheduler()
+        history = cp.get_history()
+        start_epoch = history.get_epochs()[-1] + 1
 
     train_epoch = smp.utils.train.TrainEpoch(
             model, 
@@ -193,44 +218,21 @@ def main():
             )
 
     max_score = 0
-
-    history = History(
-        metrics = ["bce_dice_loss", "iou", "f-score"],
-        aux = ["lr", "input_size", "train_mode"]
-    )
-
-    last_state_checkpoint = CheckPoint("last_state", "This is a test run")
-    best_checkpoint = CheckPoint("best", "This is a test run")
-
-    if pretrained is not None:
+    if freeze_encoder_epochs > 0:
         print("Freezing encoder weights")
         for p in model.encoder.parameters():
             p.requires_grad = False
 
-    for i in range(pretrain_epochs):
-        print('\nPretrain Epoch: %i/%i' % (i, pretrain_epochs))
+    for i in range(epochs):
+        print('\nEpoch: %i/%i' % (i+start_epoch+1, start_epoch + epochs))
         print("Current Learning Rates:")
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
-
-        train_logs = train_epoch.run(train_loader)
-        valid_logs = valid_epoch.run(val_loader)
-        history.append(
-            train_logs, 
-            valid_logs, 
-            {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize, "train_mode":"decoder_only"}
-        )
-
-    if pretrained is not None:
-        print("Thawing encoder weights")
-        for p in model.encoder.parameters():
-            p.requires_grad = True
-
-    for i in range(finetune_epochs):
-        print('\nFinetune Epoch: %i/%i' % (i, finetune_epochs))
-        print("Current Learning Rates:")
-        for param_group in optimizer.param_groups:
-            print(param_group['lr'])
+        
+        if i == freeze_encoder_epochs:
+            print("Thawing encoder weights")
+            for p in model.encoder.parameters():
+                p.requires_grad = True
 
         train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
@@ -238,23 +240,20 @@ def main():
         if scheduler is not None:
             scheduler.step(valid_logs['bce_dice_loss'])
 
-        history.append(
-            train_logs, 
-            valid_logs, 
-            {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize, "train_mode":"full"}
-        )
+        aux_hist = {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize}
+        if i < freeze_encoder_epochs:
+            aux_hist["train_mode"] = "encoder_frozen"
+        else:
+            aux_hist["train_mode"] = "full"
 
-        if max_score < train_logs['f-score']:
-            max_score = train_logs['f-score']
+        history.append(train_logs, valid_logs, aux_hist)
+
+        if max_score < valid_logs['f-score']:
+            max_score = valid_logs['f-score']
             best_checkpoint.save(checkpoint_best_filename, model, optimizer, history, scheduler)
-            print('Model saved!')
+            print('Model improved, checkpoint saved!')
 
-        state = {'epoch': i + 1, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
-        if scheduler is not None:
-            state["scheduler"] = scheduler.state_dict()
         last_state_checkpoint.save(checkpoint_last_filename, model, optimizer, history, scheduler)
-  
-
 
 if __name__=="__main__":
     main()
