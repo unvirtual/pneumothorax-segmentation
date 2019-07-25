@@ -6,6 +6,7 @@ import torch.optim as optim
 import pickle
 from torch.utils.data import DataLoader
 from data_loader import *
+from checkpoint import *
 
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
@@ -28,7 +29,10 @@ parser.add_argument('--imgsize', type=int, default=256)
 env = parser.parse_args()
 
 encoder_name = env.encoder
-model_file_name = env.model_file
+
+checkpoint_last_filename = env.model_file + "_last_cp.pth"
+checkpoint_best_filename = env.model_file + "_best_cp.pth"
+model_file_name = env.model_file + ".pth"
 
 train_batch_size = env.train_bs
 val_batch_size = env.val_bs
@@ -65,7 +69,7 @@ def print_parameters():
 train_transform = [
 #    albu.HorizontalFlip(p=0.5),
 
-    albu.ShiftScaleRotate(scale_limit=0.2, rotate_limit=0.1, shift_limit=0.1, p=1, border_mode=0),
+    albu.ShiftScaleRotate(scale_limit=0.2, rotate_limit=0.2, shift_limit=0.1, p=1, border_mode=0),
 
     #albu.PadIfNeeded(min_height=320, min_width=320, always_apply=True, border_mode=0),
     #albu.RandomCrop(height=320, width=320, always_apply=True),
@@ -90,51 +94,15 @@ train_transform = [
 #    #    p=0.2,
 #    #),
 #
-    albu.OneOf(
-        [
-            albu.RandomContrast(p=1),
-            albu.HueSaturationValue(p=1),
-        ],
-        p=0.5,
-    )
+#    albu.OneOf(
+#        [
+#            albu.RandomContrast(p=1),
+#            albu.HueSaturationValue(p=1),
+#        ],
+#        p=0.5,
+#    )
 ]
 train_transforms = albu.Compose(train_transform)
-train_transforms = None
-
-class FocalLoss(nn.Module):
-    __name__ = "focal_loss"
-
-    def __init__(self, alpha=1, gamma=2, logits=False, reduce=True, activation="sigmoid"):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.logits = logits
-        self.reduce = reduce
-        if activation is None or activation == "none":
-            self.activation_fn = lambda x: x
-        elif activation == "sigmoid":
-            self.activation_fn = torch.nn.Sigmoid()
-        elif activation == "softmax2d":
-            self.activation_fn = torch.nn.Softmax2d()
-        else:
-            raise NotImplementedError(
-                "Activation implemented for sigmoid and softmax2d"
-            )
-    
-
-    def forward(self, inputs, targets):
-        inputs = self.activation_fn(inputs)
-        if self.logits:
-            BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduce=False)
-        else:
-            BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
-        pt = torch.exp(-BCE_loss)
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
-
-        if self.reduce:
-            return torch.mean(F_loss)
-        else:
-            return F_loss
 
 def main():
     print_parameters()
@@ -158,23 +126,16 @@ def main():
 
     print(model)
 
-#    optimizer = torch.optim.Adam([
-#            {'params': model.decoder.parameters(), 'lr': 1e-4}, 
-#                
-#            # decrease lr for encoder in order not to permute 
-#            # pre-trained weights with large gradients on training
-#            # start
-#            {'params': model.encoder.parameters(), 'lr': 1e-4}
-#            ])
-
-    optimizer = torch.optim.SGD([
-            {'params': model.decoder.parameters(), 'lr': 1e-2, "momentum": 0.9}, 
+    optimizer = torch.optim.Adam([
+            {'params': model.decoder.parameters(), 'lr': 1e-4}, 
                 
             # decrease lr for encoder in order not to permute 
             # pre-trained weights with large gradients on training
             # start
-            {'params': model.encoder.parameters(), 'lr': 1e-2, "momentum": 0.9}
+            {'params': model.encoder.parameters(), 'lr': 1e-4}
             ])
+
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=5)
 
     train, val = df.train_val_split(
             train_val_split, 
@@ -209,7 +170,6 @@ def main():
             num_workers=4)
 
     loss = smp.utils.losses.BCEDiceLoss(eps=1.)
-    #loss = FocalLoss()
     metrics = [
                 smp.utils.metrics.IoUMetric(eps=1.),
                 smp.utils.metrics.FscoreMetric(eps=1.),
@@ -234,8 +194,13 @@ def main():
 
     max_score = 0
 
-    train_history = []
-    valid_history = []
+    history = History(
+        metrics = ["bce_dice_loss", "iou", "f-score"],
+        aux = ["lr", "input_size", "train_mode"]
+    )
+
+    last_state_checkpoint = CheckPoint("last_state", "This is a test run")
+    best_checkpoint = CheckPoint("best", "This is a test run")
 
     if pretrained is not None:
         print("Freezing encoder weights")
@@ -247,10 +212,14 @@ def main():
         print("Current Learning Rates:")
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
+
         train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
-        train_history.extend([train_logs])
-        valid_history.extend([valid_logs])
+        history.append(
+            train_logs, 
+            valid_logs, 
+            {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize, "train_mode":"decoder_only"}
+        )
 
     if pretrained is not None:
         print("Thawing encoder weights")
@@ -262,19 +231,30 @@ def main():
         print("Current Learning Rates:")
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
+
         train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
-        train_history.extend([train_logs])
-        valid_history.extend([valid_logs])
+
+        if scheduler is not None:
+            scheduler.step(valid_logs['bce_dice_loss'])
+
+        history.append(
+            train_logs, 
+            valid_logs, 
+            {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize, "train_mode":"full"}
+        )
 
         if max_score < train_logs['f-score']:
             max_score = train_logs['f-score']
-            torch.save(model, './' + model_file_name)
+            best_checkpoint.save(checkpoint_best_filename, model, optimizer, history, scheduler)
             print('Model saved!')
 
-        history = {"train":train_history, "val":valid_history}
-        with open("./"+model_file_name+".history.pkl", "wb") as f:
-            pickle.dump(history, f)
+        state = {'epoch': i + 1, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
+        if scheduler is not None:
+            state["scheduler"] = scheduler.state_dict()
+        last_state_checkpoint.save(checkpoint_last_filename, model, optimizer, history, scheduler)
+  
+
 
 if __name__=="__main__":
     main()
