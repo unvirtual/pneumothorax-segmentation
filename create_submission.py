@@ -26,7 +26,7 @@ def extract_mask_clusters(pixels, min_pix, input_dims):
     mask = np.clip(mask, 0,1)
     return mask
 
-def filter_mask(pred_masks, thr, min_pix, input_dims=(256, 256)):
+def filter_mask(pred_masks, thr, min_pix, input_dims):
     assert (thr <= 1.0) and (thr >= 0), "Threshold must be in [0,1]"
     assert min_pix > 0, "min_pix must be > 0"
     assert pred_masks.max() <= 1.0, "pred_masks must be normalized to [0,1]"
