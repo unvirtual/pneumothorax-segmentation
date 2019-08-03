@@ -13,19 +13,24 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
 class SIIMDataFrame:
-    def __init__(self, df, has_labels=True):
+    def __init__(self, df, only_labeled=False, has_labels=True):
+        if (not has_labels) and only_labeled:
+            raise ValueError
         self.train_df = df
         self.has_labels = has_labels
+        if only_labeled:
+            self.train_df = self.train_df[self.train_df["HasMask"]].reset_index()
+
 
     @classmethod
-    def from_dirs(cls, train_dir, labels_file):
+    def from_dirs(cls, train_dir, labels_file, only_labeled=False):
         input_df = cls._create_input_dataset(train_dir)
         if labels_file is not None:
             labels_df = cls._create_label_dataset(labels_file)
             train_df = cls._merge_input_with_labels(input_df, labels_df)
-            return cls(train_df)
+            return cls(train_df, only_labeled=only_labeled)
         else:
-            return cls(input_df, has_labels=False)
+            return cls(input_df, has_labels=False, only_labeled=only_labeled)
 
     def get_siim_dataframe(self):
         return self.train_df
@@ -73,8 +78,8 @@ class SIIMDataFrame:
         def df_extract_metadata_from_path(df):
             dcm = pydicom.dcmread(df['Path'])
             df['Age'] = dcm.PatientAge
-            df['Sex'] = dcm.PatientSex 
-            df['Rows'] = dcm.Rows 
+            df['Sex'] = dcm.PatientSex
+            df['Rows'] = dcm.Rows
             df['Columns'] = dcm.Columns
             return df
         input_df = input_df.apply(df_extract_metadata_from_path, axis=1)
@@ -99,7 +104,7 @@ class SIIMDataFrame:
     @staticmethod
     def _merge_input_with_labels(input_df, labels_df):
         print(10*"*" + " Before merge " + 10*"*")
-        print("Input Data Shape:  %s" % str(input_df.shape)) 
+        print("Input Data Shape:  %s" % str(input_df.shape))
         print("Labels Shape:      %s" % str(labels_df.shape))
         df = pd.merge(labels_df, input_df, on="ImageId", validate="one_to_one")
         print(10*"*" + " After merge " + 10*"*")
@@ -107,27 +112,30 @@ class SIIMDataFrame:
         return df
 
 class SIIMDataSet(Dataset):
-    def __init__(self, siim_df, img_size, n_channels, preproc=None, has_labels=True, augmentations=None):
+    def __init__(self, siim_df, img_size, n_channels, preproc=None, has_labels=True, augmentations=None, image_label=False):
         self.train_df = siim_df
         self.img_size = img_size
         self.n_channels = n_channels
         self.preproc = preproc
         self.has_labels = has_labels
         self.augmentations = augmentations
+        self.image_label = image_label
 
     def __len__(self):
         return len(self.train_df["Path"])
 
     def __getitem__(self, index):
-        # Required for abort on iteration
         if index >= len(self):
             raise IndexError
         img = self._get_img_array(self.train_df["Path"][index])
-#        img = exposure.equalize_adapthist(img).clip(0,1)
         img = np.stack((img,)*self.n_channels)
         img = img.transpose(1,2,0)
 
-        if self.has_labels:
+        label = None
+        if self.image_label:
+            label = self.train_df["HasMask"][index].astype(int)
+
+        if self.has_labels and (not self.image_label):
             mask = self._create_mask(self.train_df.iloc[index])
             mask = cv2.resize(mask, (self.img_size, self.img_size))
             mask = mask.reshape((-1, self.img_size, self.img_size))
@@ -142,6 +150,8 @@ class SIIMDataSet(Dataset):
 
         img = img.transpose(2,0,1)/255.
 
+        if self.image_label:
+            return torch.from_numpy(img).float(), torch.from_numpy(label.reshape((-1))).float()
         if self.has_labels:
             return torch.from_numpy(img).float(), torch.from_numpy(mask).float()
         else:
