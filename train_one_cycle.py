@@ -15,7 +15,7 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 import albumentations as albu
 
 parser = argparse.ArgumentParser()
-parser.add_argument('train_bs', type=int)
+parser.add_argument('train_bs', type=int) 
 parser.add_argument('val_bs', type=int)
 parser.add_argument('epochs', type=int)
 parser.add_argument('model_file', type=str)
@@ -27,10 +27,16 @@ parser.add_argument('--train_val_split', type=float, default=0.2)
 parser.add_argument('--data_frac', type=float, default=1.0)
 parser.add_argument('--imgsize', type=int, default=256)
 parser.add_argument('--from_checkpoint', type=str, default="")
+parser.add_argument('--dry-run', action="store_true")
 
 env = parser.parse_args()
 
+dry_run = env.dry_run
+
 encoder_name = env.encoder
+
+checkpoint_last_filename = env.model_file + "_last_cp.pth"
+checkpoint_best_filename = env.model_file + "_best_cp.pth"
 
 start_from_checkpoint = False
 if env.from_checkpoint != "":
@@ -75,7 +81,7 @@ train_transform = [
 
     albu.ShiftScaleRotate(scale_limit=0.2, rotate_limit=0.2, shift_limit=0.1, p=1, border_mode=0),
 
-    albu.PadIfNeeded(min_height=320, min_width=320, always_apply=True, border_mode=0),
+    albu.PadIfNeeded(min_height=imgsize, min_width=imgsize, always_apply=True, border_mode=0),
     #albu.RandomCrop(height=320, width=320, always_apply=True),
 
     albu.IAAAdditiveGaussianNoise(p=0.2),
@@ -123,8 +129,8 @@ def main():
         preprocess_input = None
 
     train, val = df.train_val_split(
-            train_val_split,
-            stratify=False,
+            train_val_split, 
+            stratify=False, 
             sample_frac=data_frac)
 
     print("train set:")
@@ -146,13 +152,13 @@ def main():
     print("mask shape:        ", train_ds.__getitem__(0)[1].shape)
 
     train_loader = DataLoader(
-            dataset=train_ds,
-            batch_size=train_batch_size,
+            dataset=train_ds, 
+            batch_size=train_batch_size, 
             shuffle=True,
             num_workers=12)
     val_loader = DataLoader(
-            dataset=val_ds,
-            batch_size=val_batch_size,
+            dataset=val_ds, 
+            batch_size=val_batch_size, 
             shuffle=False,
             num_workers=4)
 
@@ -163,28 +169,22 @@ def main():
     elif network == "pspnet":
         model = smp.PSPNet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
 
-    optimizer = torch.optim.Adam([
-            {'params': model.decoder.parameters(), 'lr': 1e-4},
+    optimizer = optim.SGD(model.parameters(), lr=5e-4, momentum=0.9)
 
-            # decrease lr for encoder in order not to permute
-            # pre-trained weights with large gradients on training
-            # start
-            {'params': model.encoder.parameters(), 'lr': 1e-4}
-            ])
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, 7e-4, 5e-3, step_size_up=epochs_thawed/2 + freeze_encoder_epochs, step_size_down=epochs_thawed/2)
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=3)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 5e-3, step_size_up=1, step_size_down=15)
+    scheduler = None
 
     loss = smp.utils.losses.BCEDiceLoss(eps=1.)
-    #loss = MyBCEWithLogitsLoss()
 
     metrics = [
                 smp.utils.metrics.IoUMetric(eps=1.),
                 smp.utils.metrics.FscoreMetric(eps=1.),
     ]
 
-    training_run = TrainingRun(env.model_file, "bla", "UNETRESNET34", train_ds, val_ds)
-    training_run.create()
-
+    last_state_checkpoint = CheckPoint("LAST", "Unet Resnet34. Pretrained on imagenet. Encoder frozen during training. ADAM optimizer")
+    best_checkpoint = CheckPoint("BEST", "Unet Resnet34. Pretrained on imagenet. Encoder frozen during training. ADAM optimizer")
 
     history = History(
         metrics = ["bce_dice_loss", "iou", "f-score"],
@@ -193,41 +193,33 @@ def main():
 
     start_epoch = 0
 
-#    if start_from_checkpoint:
-#        cp = CheckPoint.load(checkpoint, model, optimizer, scheduler)
-#        print("Using Checkpoint:")
-#        print(cp.get_name_and_description())
-#
-#        model = cp.get_model()
-#        optimizer = cp.get_optimizer()
-#        scheduler = cp.get_scheduler()
-#        history = cp.get_history()
-#        start_epoch = history.get_epochs()[-1] + 1
+    if start_from_checkpoint:
+        cp = CheckPoint.load(checkpoint, model, optimizer=None, scheduler=None)
+        print("Using Checkpoint:")
+        print(cp.get_name_and_description())
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=4)
-
-    optimizer = torch.optim.Adam([
-            {'params': model.decoder.parameters(), 'lr': 1e-4},
-
-            # decrease lr for encoder in order not to permute
-            # pre-trained weights with large gradients on training
-            # start
-            {'params': model.encoder.parameters(), 'lr': 1e-4}
-            ])
+        model = cp.get_model()
+        print("Skipping checkpoint optimizer and scheduler")
+        print("optimizer: ", optimizer)
+        print("scheduler: ", scheduler)
+        #optimizer = cp.get_optimizer()
+        #scheduler = cp.get_scheduler()
+        history = cp.get_history()
+        start_epoch = history.get_epochs()[-1] + 1
 
     train_epoch = smp.utils.train.TrainEpoch(
-            model,
-            loss=loss,
-            metrics=metrics,
+            model, 
+            loss=loss, 
+            metrics=metrics, 
             optimizer=optimizer,
             device=device,
             verbose=True,
             )
 
     valid_epoch = smp.utils.train.ValidEpoch(
-            model,
-            loss=loss,
-            metrics=metrics,
+            model, 
+            loss=loss, 
+            metrics=metrics, 
             device=device,
             verbose=True,
             )
@@ -243,17 +235,18 @@ def main():
         print("Current Learning Rates:")
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
-
+        
         if i == freeze_encoder_epochs:
             print("Thawing encoder weights")
             for p in model.encoder.parameters():
                 p.requires_grad = True
 
-        train_logs = train_epoch.run(train_loader)
-        valid_logs = valid_epoch.run(val_loader)
+        if not dry_run:
+            train_logs = train_epoch.run(train_loader)
+            valid_logs = valid_epoch.run(val_loader)
 
         if scheduler is not None:
-            scheduler.step(valid_logs['bce_dice_loss'])
+            scheduler.step()
 
         aux_hist = {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize}
         if i < freeze_encoder_epochs:
@@ -261,14 +254,15 @@ def main():
         else:
             aux_hist["train_mode"] = "full"
 
-        history.append(train_logs, valid_logs, aux_hist)
+        if not dry_run:
+            history.append(train_logs, valid_logs, aux_hist)
 
-        if max_score < valid_logs['f-score']:
-            max_score = valid_logs['f-score']
-            training_run.save("best", model, optimizer, history, scheduler)
-            print('Model improved, checkpoint saved!')
+            if max_score < valid_logs['f-score']:
+                max_score = valid_logs['f-score']
+                best_checkpoint.save(checkpoint_best_filename, model, optimizer, history, scheduler)
+                print('Model improved, checkpoint saved!')
 
-        training_run.save("last", model, optimizer, history, scheduler)
+            last_state_checkpoint.save(checkpoint_last_filename, model, optimizer, history, scheduler)
 
 if __name__=="__main__":
     main()

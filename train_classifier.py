@@ -7,15 +7,16 @@ import pickle
 from torch.utils.data import DataLoader
 from data_loader import *
 from checkpoint import *
-
-from losses import *
+import torchvision
+import torchvision.transforms as transforms
+from collections import OrderedDict
 
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 import albumentations as albu
 
 parser = argparse.ArgumentParser()
-parser.add_argument('train_bs', type=int)
+parser.add_argument('train_bs', type=int) 
 parser.add_argument('val_bs', type=int)
 parser.add_argument('epochs', type=int)
 parser.add_argument('model_file', type=str)
@@ -31,6 +32,9 @@ parser.add_argument('--from_checkpoint', type=str, default="")
 env = parser.parse_args()
 
 encoder_name = env.encoder
+
+checkpoint_last_filename = env.model_file + "_last_cp.pth"
+checkpoint_best_filename = env.model_file + "_best_cp.pth"
 
 start_from_checkpoint = False
 if env.from_checkpoint != "":
@@ -71,24 +75,24 @@ def print_parameters():
         print("using full dataset")
 
 train_transform = [
-    albu.HorizontalFlip(p=0.5),
+#    albu.HorizontalFlip(p=0.5),
 
     albu.ShiftScaleRotate(scale_limit=0.2, rotate_limit=0.2, shift_limit=0.1, p=1, border_mode=0),
 
-    albu.PadIfNeeded(min_height=320, min_width=320, always_apply=True, border_mode=0),
+    #albu.PadIfNeeded(min_height=320, min_width=320, always_apply=True, border_mode=0),
     #albu.RandomCrop(height=320, width=320, always_apply=True),
 
-    albu.IAAAdditiveGaussianNoise(p=0.2),
-    albu.IAAPerspective(p=0.2),
+    #albu.IAAAdditiveGaussianNoise(p=0.2),
+    #albu.IAAPerspective(p=0.2),
 
-    albu.OneOf(
-        [
-            albu.CLAHE(p=1),
-            albu.RandomBrightness(p=1),
-            albu.RandomGamma(p=1),
-        ],
-        p=0.5,
-    ),
+#    albu.OneOf(
+#        [
+#            albu.CLAHE(p=1),
+#            albu.RandomBrightness(p=1),
+#            albu.RandomGamma(p=1),
+#        ],
+#        p=0.5,
+#    ),
 #
 #    #albu.OneOf(
 #    #    [
@@ -98,15 +102,31 @@ train_transform = [
 #    #    p=0.2,
 #    #),
 #
-    albu.OneOf(
-        [
-            albu.RandomContrast(p=1),
+#    albu.OneOf(
+#        [
+#            albu.RandomContrast(p=1),
 #            albu.HueSaturationValue(p=1),
-        ],
-        p=0.5,
-    )
+#        ],
+#        p=0.5,
+#    )
 ]
 train_transforms = albu.Compose(train_transform)
+
+class BCELoss(nn.Module):
+    __name__ = 'bce_loss'
+
+    def __init__(self, thr=None):
+        super(BCELoss, self).__init__()
+        self.bce = nn.BCEWithLogitsLoss(reduction='mean')
+        #self.sigmoid = nn.Sigmoid()
+        self.thr = thr
+
+    def forward(self, y_pr, y_gt):
+        #y_pr = self.sigmoid(y_pr)
+        #if self.thr is not None:
+        #    y_pr = (y_pr > self.thr).float()
+        bce = self.bce(y_pr, y_gt)
+        return bce
 
 def main():
     print_parameters()
@@ -115,16 +135,12 @@ def main():
 
     siim_df_filename = "full_metadata_df.pkl"
     df = SIIMDataFrame(pd.read_pickle(siim_df_filename))
-    #df = SIIMDataFrame(pd.read_pickle(siim_df_filename), only_labeled=True)
 
-    if pretrained is not None:
-        preprocess_input = get_preprocessing_fn(encoder_name, pretrained=pretrained)
-    else:
-        preprocess_input = None
+    preprocess_input = get_preprocessing_fn("resnet34", pretrained="imagenet")
 
     train, val = df.train_val_split(
-            train_val_split,
-            stratify=False,
+            train_val_split, 
+            stratify=False, 
             sample_frac=data_frac)
 
     print("train set:")
@@ -136,124 +152,103 @@ def main():
     print("   positives: ", val["HasMask"].sum())
     print("   negatives: ", (~val["HasMask"]).sum())
 
-    loss_weight = (~train["HasMask"]).sum()/train["HasMask"].sum()
 
-
-    train_ds = SIIMDataSet(train, imgsize, inchannels, preproc=preprocess_input, augmentations=train_transforms)
-    val_ds = SIIMDataSet(val, imgsize, inchannels, preproc=preprocess_input)
+    train_ds = SIIMDataSet(train, imgsize, inchannels, preproc=preprocess_input, augmentations=train_transforms, image_label=True)
+    val_ds = SIIMDataSet(val, imgsize, inchannels, preproc=preprocess_input, image_label=True)
 
     print("input image shape: ", train_ds.__getitem__(0)[0].shape)
     print("mask shape:        ", train_ds.__getitem__(0)[1].shape)
 
     train_loader = DataLoader(
-            dataset=train_ds,
-            batch_size=train_batch_size,
+            dataset=train_ds, 
+            batch_size=train_batch_size, 
             shuffle=True,
             num_workers=12)
     val_loader = DataLoader(
-            dataset=val_ds,
-            batch_size=val_batch_size,
+            dataset=val_ds, 
+            batch_size=val_batch_size, 
             shuffle=False,
             num_workers=4)
 
-    if network == "unet":
-        model = smp.Unet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid", decoder_use_batchnorm=True).to(device)
-    elif network == "fpn":
-        model = smp.FPN(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
-    elif network == "pspnet":
-        model = smp.PSPNet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
+    model = torchvision.models.resnet50(pretrained=True)
 
-    optimizer = torch.optim.Adam([
-            {'params': model.decoder.parameters(), 'lr': 1e-4},
+    n_inputs = model.fc.in_features
 
-            # decrease lr for encoder in order not to permute
-            # pre-trained weights with large gradients on training
-            # start
-            {'params': model.encoder.parameters(), 'lr': 1e-4}
-            ])
+    # add more layers as required
+    classifier = nn.Sequential(OrderedDict([
+        ('fc1', nn.Linear(n_inputs, 1))
+    ]))
+    
+    model.fc = classifier
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=3)
 
-    loss = smp.utils.losses.BCEDiceLoss(eps=1.)
-    #loss = MyBCEWithLogitsLoss()
+    loss = BCELoss(thr=None)
+
+    last_state_checkpoint = CheckPoint("LAST", "Classifier for mask present.")
+    best_checkpoint = CheckPoint("BEST", "Classifier for mask present")
+
+    history = History(
+        metrics = ["bce_loss", "f-score"],
+        aux = ["lr", "input_size"]
+    )
 
     metrics = [
-                smp.utils.metrics.IoUMetric(eps=1.),
                 smp.utils.metrics.FscoreMetric(eps=1.),
     ]
 
-    training_run = TrainingRun(env.model_file, "bla", "UNETRESNET34", train_ds, val_ds)
-    training_run.create()
-
-
-    history = History(
-        metrics = ["bce_dice_loss", "iou", "f-score"],
-        aux = ["lr", "input_size", "train_mode"]
-    )
-
     start_epoch = 0
 
-#    if start_from_checkpoint:
-#        cp = CheckPoint.load(checkpoint, model, optimizer, scheduler)
-#        print("Using Checkpoint:")
-#        print(cp.get_name_and_description())
-#
-#        model = cp.get_model()
-#        optimizer = cp.get_optimizer()
-#        scheduler = cp.get_scheduler()
-#        history = cp.get_history()
-#        start_epoch = history.get_epochs()[-1] + 1
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=4)
-
-    optimizer = torch.optim.Adam([
-            {'params': model.decoder.parameters(), 'lr': 1e-4},
-
-            # decrease lr for encoder in order not to permute
-            # pre-trained weights with large gradients on training
-            # start
-            {'params': model.encoder.parameters(), 'lr': 1e-4}
-            ])
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=3)
 
     train_epoch = smp.utils.train.TrainEpoch(
-            model,
-            loss=loss,
-            metrics=metrics,
+            model, 
+            loss=loss, 
+            metrics=metrics, 
             optimizer=optimizer,
             device=device,
             verbose=True,
             )
 
     valid_epoch = smp.utils.train.ValidEpoch(
-            model,
-            loss=loss,
-            metrics=metrics,
+            model, 
+            loss=loss, 
+            metrics=metrics, 
             device=device,
             verbose=True,
             )
 
     max_score = 0
-    if freeze_encoder_epochs > 0:
-        print("Freezing encoder weights")
-        for p in model.encoder.parameters():
-            p.requires_grad = False
+#    if freeze_encoder_epochs > 0:
+#        print("Freezing encoder weights")
+#        for p in model.encoder.parameters():
+#            p.requires_grad = False
+
+    for p in model.parameters():
+        p.requires_grad = False
+ 
+    for p in model.fc.parameters():
+        p.requires_grad = True
+
 
     for i in range(epochs):
         print('\nEpoch: %i/%i' % (i+start_epoch+1, start_epoch + epochs))
         print("Current Learning Rates:")
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
-
-        if i == freeze_encoder_epochs:
-            print("Thawing encoder weights")
-            for p in model.encoder.parameters():
-                p.requires_grad = True
+        
+#        if i == freeze_encoder_epochs:
+#            print("Thawing encoder weights")
+#            for p in model.encoder.parameters():
+#                p.requires_grad = True
 
         train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
 
         if scheduler is not None:
-            scheduler.step(valid_logs['bce_dice_loss'])
+            scheduler.step(valid_logs['bce_loss'])
 
         aux_hist = {"lr": [p['lr'] for p in optimizer.param_groups], "input_size":imgsize}
         if i < freeze_encoder_epochs:
@@ -265,10 +260,10 @@ def main():
 
         if max_score < valid_logs['f-score']:
             max_score = valid_logs['f-score']
-            training_run.save("best", model, optimizer, history, scheduler)
+            best_checkpoint.save(checkpoint_best_filename, model, optimizer, history, scheduler)
             print('Model improved, checkpoint saved!')
 
-        training_run.save("last", model, optimizer, history, scheduler)
+        last_state_checkpoint.save(checkpoint_last_filename, model, optimizer, history, scheduler)
 
 if __name__=="__main__":
     main()

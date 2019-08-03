@@ -7,6 +7,10 @@ import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+from checkpoint import *
+
+from multiprocessing import Pool, cpu_count
+import os
 
 from multiprocessing import Pool, cpu_count
 import os
@@ -26,7 +30,7 @@ def extract_mask_clusters(pixels, min_pix, input_dims):
     mask = np.clip(mask, 0,1)
     return mask
 
-def filter_mask(pred_masks, thr, min_pix, input_dims=(256, 256)):
+def filter_mask(pred_masks, thr, min_pix, input_dims):
     assert (thr <= 1.0) and (thr >= 0), "Threshold must be in [0,1]"
     assert min_pix > 0, "min_pix must be > 0"
     assert pred_masks.max() <= 1.0, "pred_masks must be normalized to [0,1]"
@@ -58,17 +62,15 @@ def rle_from_predicted_mask(mask, output_dims=(1024,1024)):
 
 
 def postprocess_predicted_mask(mask, path, thr, min_pix, input_dims):
-    mask = mask.cpu().numpy()
     mask = filter_mask(mask, thr, min_pix, input_dims)
     rle = rle_from_predicted_mask(mask)
     return [os.path.basename(path)[:-4], rle]
 
-BATCHSIZE=32
+BATCHSIZE=24
 DEV = "cpu"
-def predict_rles(model_file, encoder, pretrained, directory, thr, min_pix, img_size):
+def predict_rles(model, encoder, pretrained, directory, thr, min_pix, img_size):
     results = []
-    print("Loading Model", model_file)
-    model = torch.load(model_file, map_location=DEV).to(DEV)
+    model = model.to(DEV)
     preprocess_input = get_preprocessing_fn(encoder, pretrained=pretrained)
     
     print("Loading images from", directory)
@@ -80,20 +82,22 @@ def predict_rles(model_file, encoder, pretrained, directory, thr, min_pix, img_s
     model.eval()
 
     dl = DataLoader(ds,BATCHSIZE)
+    print("Batchsize:", BATCHSIZE)
     for i, (images, paths) in enumerate(dl):
-        print("Prediction %i/%i" % (i+1,len(dl)))
-
+        print("Batch %i/%i" % (i+1,len(dl)))
         images = images.to(DEV)
         pred = model.predict(images)
+        pred = pred.cpu().numpy()
         batch_results = [pool.apply_async(postprocess_predicted_mask, (mask, path, thr, min_pix, (img_size, img_size))) for mask, path in zip(pred, paths)]
         for r in batch_results:
             results.extend([r.get()])
-        if i == 4:
-            break
+    pool.close()
     return results
 
 if __name__ == "__main__":
     print("No. of CPUs:", cpu_count())
     print("batch size: ", BATCHSIZE)
-    results = predict_rles("models/unet_resnet34_input_256_best.pth", "resnet34", "imagenet", "data-original/dicom-images-test", 0.5, 50, 256)
-    pd.DataFrame(results, columns=["ImageId","EncodedPixels"]).to_csv("test_submission.csv", index=False)
+    model = smp.Unet("resnet34", classes=1, encoder_weights="imagenet", activation="sigmoid")
+    cp = CheckPoint.load("unet_resnet34_512_one_cycle_then_constant_last_cp.pth", model, device=DEV)
+    results = predict_rles(cp.get_model(), "resnet34", "imagenet", "data-original/dicom-images-test", 0.65, 50, 512)
+    pd.DataFrame(results, columns=["ImageId","EncodedPixels"]).to_csv("submission_newest_512.csv", index=False)
