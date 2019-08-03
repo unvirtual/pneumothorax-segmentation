@@ -43,19 +43,38 @@ class SIIMDataFrame:
         if stratify:
             split_params["stratify"] = self.train_df["HasMask"]
 
-        if sample_frac is not None:
-            train_df = self.train_df.sample(frac=sample_frac)
+        if sample_frac is not None and sample_frac < 0.999:
+            dpos = self.train_df[self.train_df["HasMask"]].copy()
+            dneg = self.train_df[~self.train_df["HasMask"]].copy()
+            ldpos = len(dpos)
+            ldneg = len(dneg)
+
+            weights=dpos["MaskCoverage"].value_counts(bins=50).to_dict()
+
+            dpos["freq"] = dpos["MaskCoverage"].map(weights)
+
+            pos_s = dpos.sample(frac=(1.-fraction)*sample_frac, weights="freq")
+            neg_s = dneg.sample(frac=(1.-fraction)*sample_frac)
+
+            pos_v = dpos[~dpos.index.isin(pos_s.index)]
+            neg_v = dneg[~dneg.index.isin(neg_s.index)]
+
+            pos_v = pos_v.sample(frac=1./(1-(1-fraction)*sample_frac)*fraction*sample_frac, weights="freq")
+            neg_v = neg_v.sample(frac=1./(1-(1-fraction)*sample_frac)*fraction*sample_frac)
+
+            train_set = pd.concat([pos_s, neg_s], sort=False).sample(frac=1).reset_index()
+            val_set = pd.concat([pos_v, neg_v], sort=False).sample(frac=1).reset_index()
         else:
             train_df = self.train_df
 
-        train_set, val_set, train_lbl, val_lbl = train_test_split(
-                train_df.drop(columns="EncodedPixels"),
-                train_df["EncodedPixels"], 
-                test_size = fraction,
-                **split_params)
+            train_set, val_set, train_lbl, val_lbl = train_test_split(
+                    train_df.drop(columns="EncodedPixels"),
+                    train_df["EncodedPixels"],
+                    test_size = fraction,
+                    **split_params)
 
-        train_set["EncodedPixels"] = train_lbl
-        val_set["EncodedPixels"] = val_lbl
+            train_set["EncodedPixels"] = train_lbl
+            val_set["EncodedPixels"] = val_lbl
 
         train_set = train_set.reset_index()
         val_set = val_set.reset_index()
