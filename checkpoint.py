@@ -63,15 +63,16 @@ class CheckPoint:
         torch.save(state, filename)
 
     @classmethod
-    def load(cls, filename, model, optimizer, scheduler=None):
+    def load(cls, filename, model, optimizer=None, scheduler=None, device='cuda'):
         if not os.path.isfile(filename):
             print("no checkpoint found at %s" % filename)
-        fc = torch.load(filename)
+        fc = torch.load(filename, map_location=device)
         checkpoint = cls(fc["name"], fc["desc"])
         model.load_state_dict(fc["model"])
-        optimizer.load_state_dict(fc["optimizer"])
         checkpoint.model = model
-        checkpoint.optimizer = optimizer
+        if optimizer is not None:
+            optimizer.load_state_dict(fc["optimizer"])
+            checkpoint.optimizer = optimizer
         if scheduler is not None:
             scheduler.load_state_dict(fc["scheduler"])
             checkpoint.scheduler = scheduler
@@ -79,10 +80,10 @@ class CheckPoint:
         return checkpoint
 
     @staticmethod
-    def load_history(filename):
+    def load_history(filename, device="cuda"):
         if not os.path.isfile(filename):
             print("no checkpoint found at %s" % filename)
-        fc = torch.load(filename)
+        fc = torch.load(filename, map_location=device)
         return pickle.loads(fc["history"])
 
     def get_model(self):
