@@ -33,22 +33,31 @@ class History:
 
 
 class CheckPoint:
-    def __init__(self, name, desc):
+    def __init__(self, name, total_epochs):
         self.name = name
-        self.desc = desc
         self.model = None
         self.optimizer = None
         self.scheduler = None
         self.history = None
+        self.aux = None
+        self.train_df = None
+        self.val_df = None
+        self.total_epochs = total_epochs
+        self.last_epoch = None
 
-    def save(self, filename, model, optimizer, history, scheduler=None):
-        state = {'name': self.name, 'desc': self.desc,
-                 'model': model.state_dict(),
-                 'optimizer': optimizer.state_dict()}
+    def save(self, filename, epoch, model, optimizer, history, train_df=None, val_df=None, scheduler=None, aux=None):
+        state = {'name': self.name, 'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                "total_epochs": self.total_epochs, "epoch": epoch}
         state["history"] = pickle.dumps(history)
         if scheduler is not None:
             state["scheduler"] = scheduler.state_dict()
-
+        if aux is not None:
+            state["aux"] = aux
+        if train_df is not None:
+            state["train_df"] = pickle.dumps(train_df)
+        if val_df is not None:
+            state["val_df"] = pickle.dumps(val_df)
         torch.save(state, filename)
 
     @classmethod
@@ -56,16 +65,24 @@ class CheckPoint:
         if not os.path.isfile(filename):
             print("no checkpoint found at %s" % filename)
         fc = torch.load(filename, map_location=device)
-        checkpoint = cls(fc["name"], fc["desc"])
+        checkpoint = cls(fc["name"], fc["total_epochs"])
         model.load_state_dict(fc["model"])
         checkpoint.model = model
         if optimizer is not None:
+            print("loading optimizer")
             optimizer.load_state_dict(fc["optimizer"])
             checkpoint.optimizer = optimizer
         if scheduler is not None:
-            scheduler.load_state_dict(fc["scheduler"])
-            checkpoint.scheduler = scheduler
+            checkpoint.scheduler = scheduler.load_state_dict(fc["scheduler"])
         checkpoint.history = pickle.loads(fc["history"])
+        if "aux" in fc:
+            checkpoint.aux = fc["aux"]
+        if "train_df" in fc:
+            checkpoint.train_df = pickle.loads(fc["train_df"])
+        if "val_df" in fc:
+            checkpoint.val_df = pickle.loads(fc["val_df"])
+
+        checkpoint.last_epoch = fc["epoch"]
         return checkpoint
 
     @staticmethod
