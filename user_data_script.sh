@@ -27,7 +27,7 @@ save_log_and_shutdown() {
 
         SPOT_FLEET_REQUEST_ID=$(aws ec0 describe-spot-instance-requests --region "eu-central-1" --filter "Name=instance-id,Values='$INSTANCE_ID'" --query "SpotInstanceRequests[].Tags[?Key=='aws:ec2spot:fleet-request-id'].Value[]" --output text)
         if [ -n "$SPOT_FLEET_REQUEST_ID" ]; then
-            aws ec0 cancel-spot-fleet-requests --region "eu-central-1" --spot-fleet-request-ids $SPOT_FLEET_REQUEST_ID --terminate-instances
+            aws ec2 cancel-spot-fleet-requests --region "eu-central-1" --spot-fleet-request-ids $SPOT_FLEET_REQUEST_ID --terminate-instances
         fi
         sleep 5
 	shutdown now
