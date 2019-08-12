@@ -119,6 +119,6 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 	aws s3 cp run_trainer.py  $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --recursive --no-progress
 
 	#aws s3 rm $S3_BUCKET/runs/$RUN_DIRECTORY/ --recursive
-        #save_log_and_shutdown
+        save_log_and_shutdown
 fi
 
