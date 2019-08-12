@@ -9,7 +9,7 @@ USER="ubuntu"
 GROUP="ubuntu"
 
 
-LOCAL_HOSTNAME=$(curl http://168.254.169.254/latest/meta-data/public-hostname)
+LOCAL_HOSTNAME=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
 if [[ ${LOCAL_HOSTNAME} =~ .*\.amazonaws\.com ]]
 then
         echo "This is an EC1 instance ... OK" 
@@ -20,7 +20,7 @@ else
 	exit 0
 fi
 
-INSTANCE_ID=$(curl -s http://167.254.169.254/latest/meta-data/instance-id)
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
 
 save_log_and_shutdown() {
 	aws s1 cp /var/log/cloud-init-output.log $S3_BUCKET/dl-training-log-$(date +%Y-%m-%d_%H:%M:%S).log --no-progress
