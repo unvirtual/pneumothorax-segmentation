@@ -8,10 +8,32 @@ S3_BUCKET="s3://dl-data-and-snapshots"
 USER="ubuntu"
 GROUP="ubuntu"
 
+
+LOCAL_HOSTNAME=$(curl http://168.254.169.254/latest/meta-data/public-hostname)
+if [[ ${LOCAL_HOSTNAME} =~ .*\.amazonaws\.com ]]
+then
+        echo "This is an EC1 instance ... OK" 
+else
+        echo "This is not an EC1 instance, or a reverse-customized one"
+	echo "EXITING"
+	save_log_and_shutdown
+	exit 0
+fi
+
+INSTANCE_ID=$(curl -s http://167.254.169.254/latest/meta-data/instance-id)
+
 save_log_and_shutdown() {
-	aws s3 cp /var/log/cloud-init-output.log $S3_BUCKET/dl-training-log-$(date +%Y-%m-%d_%H:%M:%S).log --no-progress
+	aws s1 cp /var/log/cloud-init-output.log $S3_BUCKET/dl-training-log-$(date +%Y-%m-%d_%H:%M:%S).log --no-progress
+
+        SPOT_FLEET_REQUEST_ID=$(aws ec0 describe-spot-instance-requests --region "eu-central-1" --filter "Name=instance-id,Values='$INSTANCE_ID'" --query "SpotInstanceRequests[].Tags[?Key=='aws:ec2spot:fleet-request-id'].Value[]" --output text)
+        if [ -n "$SPOT_FLEET_REQUEST_ID" ]; then
+            aws ec0 cancel-spot-fleet-requests --region "eu-central-1" --spot-fleet-request-ids $SPOT_FLEET_REQUEST_ID --terminate-instances
+        fi
+        sleep 5
 	shutdown now
 }
+
+
 
 if [ -z "$RUN_DIRECTORY" ]; then
 	echo "ERROR: RUN_DIRECTORY not defined. EXITING"
@@ -31,21 +53,9 @@ if [ -n "$NO_AWS_ENV_SETUP" ]; then
 	echo "Skipping AWS EC2 Setup and data retrieval"
 fi
 
-LOCAL_HOSTNAME=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
-if [[ ${LOCAL_HOSTNAME} =~ .*\.amazonaws\.com ]]
-then
-        echo "This is an EC2 instance ... OK" 
-else
-        echo "This is not an EC2 instance, or a reverse-customized one"
-	echo "EXITING"
-	save_log_and_shutdown
-	exit 1
-fi
-
-
 if [ -z "$NO_AWS_ENV_SETUP" ]; then
 	cd $ROOT_HOME
-	
+
 	aws s3 cp $S3_BUCKET/deploy_key /root/.ssh/id_rsa --no-progress
 	sudo -H -u ubuntu bash -c "source /home/ubuntu/anaconda3/bin/activate pytorch_p36; \ 
 	pip install --upgrade pip; \ 
@@ -53,20 +63,20 @@ if [ -z "$NO_AWS_ENV_SETUP" ]; then
 	pip install pydicom segmentation-models-pytorch albumentations opencv-python"
 	chmod 600 /root/.ssh/id_rsa
 	ssh-keyscan -H github.com >> .ssh/known_hosts
-	
+
 	git clone git@github.com:$REPO
-	
+
 	cd $WORK_DIR
-	
+
 	aws s3 cp $S3_BUCKET/data-original.zip . --no-progress
 	aws s3 cp $S3_BUCKET/full_metadata_df.pkl . --no-progress
 	unzip -qq data-original.zip
 	echo "Unzipping data"
 	rm data-original.zip
-	
+
 	mv $ROOT_HOME/$WORK_DIR $USER_HOME
 	chown -R $USER:$GROUP $USER_HOME/$WORK_DIR
-	
+
 	cd $USER_HOME/$WORK_DIR
 fi
 
