@@ -6,6 +6,7 @@ import data_loader as dl
 import checkpoint as cp
 import augmentations as augmentations
 import pandas as pd
+import argparse
 from trainer import Trainer, DataLoaders, Scheduler
 from validator import Validator
 from model import *
@@ -26,7 +27,7 @@ EVAL_TRAIN = False
 
 preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
 
-def main(name):
+def main(name=None):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print("Using device: %s" % device)
 
@@ -87,13 +88,13 @@ def main(name):
         print("Evaluating validation set")
         validator = Validator(model, optimizer, loaders.loaders()["val"], loaders.get_img_size())
         validator.run(50, device=device)
-        validator.write_to_file("runs/" + name + "/val_evaluation.pkl")
+        validator.write_to_file("runs/val_evaluation.pkl")
 
     if EVAL_TRAIN:
         print("Evaluating train set")
         validator = Validator(model, optimizer, loaders.loaders()["train"], loaders.get_img_size())
         validator.run(50, device=device)
-        validator.write_to_file("runs/" + name + "/train_evaluation.pkl")
+        validator.write_to_file("runs/train_evaluation.pkl")
 
 if __name__== "__main__":
-    main("testrun")
+    main()

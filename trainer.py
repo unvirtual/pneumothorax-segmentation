@@ -72,15 +72,15 @@ class Trainer:
 
     @staticmethod
     def checkpoint_exists(name):
-        return os.path.exists(Trainer.BASE_DIR + "/" + name)
+        return os.path.exists(Trainer.BASE_DIR + "/last_checkpoint.pth") or os.path.exists(Trainer.BASE_DIR + "/best_checkpoint.pth")
 
     @staticmethod
     def last_checkpoint_path(name):
-        return Trainer.BASE_DIR + "/" + name + "/last_checkpoint.pth"
+        return Trainer.BASE_DIR + "/last_checkpoint.pth"
 
     @staticmethod
     def best_checkpoint_path(name):
-        return Trainer.BASE_DIR + "/" + name + "/best_checkpoint.pth"
+        return Trainer.BASE_DIR + "/best_checkpoint.pth"
 
     def __init__(self, name, model, optimizer, epochs, loaders, scheduler=None, freeze_encoder_epochs=[], device="cpu", new_run_dir=True):
         self.name = name
@@ -96,15 +96,6 @@ class Trainer:
         self.train_loader = self.loaders.loaders()["train"]
         self.val_loader = self.loaders.loaders()["val"]
         self._setup()
-        if new_run_dir:
-            self._create_run_dir()
-
-    def _create_run_dir(self):
-        try:
-            os.mkdir(Trainer.BASE_DIR + "/" + self.name)
-        except:
-            print("Couldn't create directory for %s" % self.name)
-            raise
 
     def _setup(self):
         self.loss = smp.utils.losses.BCEDiceLoss(eps=1.)

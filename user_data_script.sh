@@ -47,9 +47,9 @@ if [ -z "$NO_AWS_ENV_SETUP" ]; then
 	cd $ROOT_HOME
 	
 	aws s3 cp $S3_BUCKET/deploy_key /root/.ssh/id_rsa --no-progress
-	sudo -H -u ubuntu bash -c "source /home/ubuntu/anaconda3/bin/activate tensorflow_p36; \ 
-	pip install --upgrade pip;
-	pip install -U scikit-image;
+	sudo -H -u ubuntu bash -c "source /home/ubuntu/anaconda3/bin/activate pytorch_p36; \ 
+	pip install --upgrade pip; \ 
+	pip install -U scikit-image; \ 
 	pip install pydicom segmentation-models-pytorch albumentations opencv-python"
 	chmod 600 /root/.ssh/id_rsa
 	ssh-keyscan -H github.com >> .ssh/known_hosts
@@ -110,20 +110,15 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 
 	echo "Running Training ..."
 	sleep 2
-
-	touch runs/snapshot1
-	sleep 5
-	touch runs/snapshot2
-	sleep 5
-	touch runs/snapshot3
-	sleep 5
+        sudo -H -u ubuntu bash -c "tmux new-session -d -s dl-session 'source /home/ubuntu/anaconda3/bin/activate pytorch_p36; python run_trainer.py; tmux wait-for -S finished; ' \; pipe-pane -o 'cat > /tmp/log' \; wait-for finished"
 
 	# wait for files to be synced
 	sleep 10
 
 	aws s3 cp runs/ $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --recursive --no-progress
+	aws s3 cp run_trainer.py  $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --recursive --no-progress
 
 	#aws s3 rm $S3_BUCKET/runs/$RUN_DIRECTORY/ --recursive
+        #save_log_and_shutdown
 fi
 
-save_log_and_shutdown
