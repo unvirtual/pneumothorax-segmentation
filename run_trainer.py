@@ -13,14 +13,14 @@ from model import *
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn    
 
-EPOCHS = 15
+EPOCHS = 10
 FREEZE_ENCODER_EPOCHS = range(2)
-TRAIN_BS = 15
-VAL_BS = 15
+TRAIN_BS = 32
+VAL_BS = 32
 IMGSIZE = 256
 IN_CHANNELS = 3
 VAL_SPLIT = 0.2
-SAMPLE_FRAC=0.002
+SAMPLE_FRAC=0.001
 EVAL_VAL = True
 EVAL_TRAIN = False
 
