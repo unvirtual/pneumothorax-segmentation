@@ -1,18 +1,14 @@
 import argparse
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-import pickle
 from torch.utils.data import DataLoader
-from data_loader import *
-from checkpoint import *
-
-from losses import *
+import data_loader as dl
+import checkpoint as cp
+import augmentations as augmentations
+import pandas as pd
 
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
-import albumentations as albu
 
 parser = argparse.ArgumentParser()
 parser.add_argument('train_bs', type=int)
@@ -70,51 +66,13 @@ def print_parameters():
     else:
         print("using full dataset")
 
-train_transform = [
-    albu.HorizontalFlip(p=0.5),
-
-    albu.ShiftScaleRotate(scale_limit=0.2, rotate_limit=0.2, shift_limit=0.1, p=1, border_mode=0),
-
-    albu.PadIfNeeded(min_height=320, min_width=320, always_apply=True, border_mode=0),
-    #albu.RandomCrop(height=320, width=320, always_apply=True),
-
-    albu.IAAAdditiveGaussianNoise(p=0.2),
-    albu.IAAPerspective(p=0.2),
-
-    albu.OneOf(
-        [
-            albu.CLAHE(p=1),
-            albu.RandomBrightness(p=1),
-            albu.RandomGamma(p=1),
-        ],
-        p=0.5,
-    ),
-#
-#    #albu.OneOf(
-#    #    [
-#    #        albu.IAASharpen(p=1),
-#    #        albu.Blur(blur_limit=1, p=1),
-#    #    ],
-#    #    p=0.2,
-#    #),
-#
-    albu.OneOf(
-        [
-            albu.RandomContrast(p=1),
-#            albu.HueSaturationValue(p=1),
-        ],
-        p=0.5,
-    )
-]
-train_transforms = albu.Compose(train_transform)
-
 def main():
     print_parameters()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print("Using device: %s" % device)
 
     siim_df_filename = "full_metadata_df.pkl"
-    df = SIIMDataFrame(pd.read_pickle(siim_df_filename))
+    df = dl.SIIMDataFrame(pd.read_pickle(siim_df_filename))
     #df = SIIMDataFrame(pd.read_pickle(siim_df_filename), only_labeled=True)
 
     if pretrained is not None:
@@ -136,11 +94,9 @@ def main():
     print("   positives: ", val["HasMask"].sum())
     print("   negatives: ", (~val["HasMask"]).sum())
 
-    loss_weight = (~train["HasMask"]).sum()/train["HasMask"].sum()
-
-
-    train_ds = SIIMDataSet(train, imgsize, inchannels, preproc=preprocess_input, augmentations=train_transforms)
-    val_ds = SIIMDataSet(val, imgsize, inchannels, preproc=preprocess_input)
+    train_transforms = augmentations.get_augmentations()
+    train_ds = dl.SIIMDataSet(train, imgsize, inchannels, preproc=preprocess_input, augmentations=train_transforms)
+    val_ds = dl.SIIMDataSet(val, imgsize, inchannels, preproc=preprocess_input)
 
     print("input image shape: ", train_ds.__getitem__(0)[0].shape)
     print("mask shape:        ", train_ds.__getitem__(0)[1].shape)
@@ -156,19 +112,10 @@ def main():
             shuffle=False,
             num_workers=4)
 
-    if network == "unet":
-        model = smp.Unet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid", decoder_use_batchnorm=True).to(device)
-    elif network == "fpn":
-        model = smp.FPN(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
-    elif network == "pspnet":
-        model = smp.PSPNet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid").to(device)
+    model = smp.Unet(encoder_name, classes=1, encoder_weights=pretrained, activation="sigmoid", decoder_use_batchnorm=True).to(device)
 
     optimizer = torch.optim.Adam([
             {'params': model.decoder.parameters(), 'lr': 1e-4},
-
-            # decrease lr for encoder in order not to permute
-            # pre-trained weights with large gradients on training
-            # start
             {'params': model.encoder.parameters(), 'lr': 1e-4}
             ])
 
@@ -182,11 +129,7 @@ def main():
                 smp.utils.metrics.FscoreMetric(eps=1.),
     ]
 
-    training_run = TrainingRun(env.model_file, "bla", "UNETRESNET34", train_ds, val_ds)
-    training_run.create()
-
-
-    history = History(
+    history = cp.History(
         metrics = ["bce_dice_loss", "iou", "f-score"],
         aux = ["lr", "input_size", "train_mode"]
     )
@@ -205,15 +148,6 @@ def main():
 #        start_epoch = history.get_epochs()[-1] + 1
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=4)
-
-    optimizer = torch.optim.Adam([
-            {'params': model.decoder.parameters(), 'lr': 1e-4},
-
-            # decrease lr for encoder in order not to permute
-            # pre-trained weights with large gradients on training
-            # start
-            {'params': model.encoder.parameters(), 'lr': 1e-4}
-            ])
 
     train_epoch = smp.utils.train.TrainEpoch(
             model,
@@ -265,10 +199,13 @@ def main():
 
         if max_score < valid_logs['f-score']:
             max_score = valid_logs['f-score']
-            training_run.save("best", model, optimizer, history, scheduler)
+            checkpoint_best = cp.CheckPoint("Best", "Bla")
+            checkpoint_best.save("best.pth", model, optimizer, history, scheduler)
             print('Model improved, checkpoint saved!')
 
-        training_run.save("last", model, optimizer, history, scheduler)
+
+        checkpoint_last = cp.CheckPoint("Last", "Bla")
+        checkpoint_last.save("last.pth", model, optimizer, history, scheduler)
 
 if __name__=="__main__":
     main()
