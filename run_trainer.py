@@ -14,14 +14,14 @@ from model import *
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn    
 
-EPOCHS = 10
-FREEZE_ENCODER_EPOCHS = range(2)
+EPOCHS = 40
+FREEZE_ENCODER_EPOCHS = range(10)
 TRAIN_BS = 32
 VAL_BS = 32
 IMGSIZE = 256
 IN_CHANNELS = 3
 VAL_SPLIT = 0.2
-SAMPLE_FRAC=0.001
+SAMPLE_FRAC=1
 EVAL_VAL = True
 EVAL_TRAIN = False
 
@@ -51,9 +51,10 @@ def main(name=None):
  
     train_transforms = augmentations.get_augmentations()
 
-    model = ResUNet("resnet34", pretrained="imagenet", interpolate="nearest")
-    optimizer = optim.SGD(model.parameters(), lr=5e-4, momentum=0.9)
-    torch_scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 5e-3, step_size_up=5, step_size_down=10)
+    model = ResUNet("resnet34", pretrained="imagenet")
+    optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
+    #torch_scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 5e-3, step_size_up=25, step_size_down=15)
+    torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=8)
 
     scheduler = Scheduler(torch_scheduler)
     
