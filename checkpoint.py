@@ -28,20 +28,9 @@ class History:
         self.epochs.append(self._current_epoch)
         self._current_epoch += 1
 
-    def get_logs(self):
+    def logs(self):
         return {'epochs':self.epochs, 'train': self.train_log, 'val': self.val_log, 'aux': self.aux_log}
 
-    def get_epochs(self):
-        return self.epochs
-
-    def get_train_logs(self):
-        return self.train_log
-
-    def get_val_logs(self):
-        return self.val_log
-
-    def get_metrics(self):
-        return self.metrics
 
 class CheckPoint:
     def __init__(self, name, desc):
@@ -85,18 +74,3 @@ class CheckPoint:
             print("no checkpoint found at %s" % filename)
         fc = torch.load(filename, map_location=device)
         return pickle.loads(fc["history"])
-
-    def get_model(self):
-        return self.model
-
-    def get_optimizer(self):
-        return self.optimizer
-
-    def get_scheduler(self):
-        return self.scheduler
-
-    def get_history(self):
-        return self.history
-
-    def get_name_and_description(self):
-        return self.name, self.desc

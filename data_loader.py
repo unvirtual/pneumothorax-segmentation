@@ -5,11 +5,8 @@ import cv2
 import numpy as np
 import pydicom
 import os
-import sys
-import pickle
-from skimage import exposure
-from mask_utils import *
-from torch.utils.data import Dataset, DataLoader
+from mask_utils import rle2mask
+from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
 
 class SIIMDataFrame:
@@ -46,8 +43,6 @@ class SIIMDataFrame:
         if sample_frac is not None and sample_frac < 0.999:
             dpos = self.train_df[self.train_df["HasMask"]].copy()
             dneg = self.train_df[~self.train_df["HasMask"]].copy()
-            ldpos = len(dpos)
-            ldneg = len(dneg)
 
             weights=dpos["MaskCoverage"].value_counts(bins=50).to_dict()
 
@@ -186,3 +181,9 @@ class SIIMDataSet(Dataset):
     def _get_img_array(self, path):
         dcm = pydicom.dcmread(path)
         return cv2.resize(dcm.pixel_array, (self.img_size, self.img_size))
+
+    def get_dataframe(self):
+        return self.train_df
+
+    def get_img_size(self):
+        return self.img_size
