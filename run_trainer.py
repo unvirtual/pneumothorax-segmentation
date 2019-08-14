@@ -97,5 +97,9 @@ def main(name=None):
         validator.run(50, device=device)
         validator.write_to_file("runs/train_evaluation.pkl")
 
+    with open("runs/FINISHED", "w") as file:
+        file.write("finished")
+
+
 if __name__== "__main__":
     main()

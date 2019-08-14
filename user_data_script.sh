@@ -123,13 +123,14 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 
 	echo "Running Training ..."
 	sleep 2
-        sudo -H -u ubuntu bash -c "tmux new-session -d -s dl-session 'source /home/ubuntu/anaconda3/bin/activate pytorch_p36; python run_trainer.py; tmux wait-for -S finished; ' \; pipe-pane -o 'cat > /tmp/log' \; wait-for finished"
+        sudo -H -u ubuntu bash -c "tmux new-session -d -s dl-session 'source /home/ubuntu/anaconda3/bin/activate pytorch_p36; python run_trainer.py; tmux wait-for -S finished; ' \; pipe-pane -o 'cat > /home/ubuntu/pneumothorax-segmentation/log' \; wait-for finished"
 
 	# wait for files to be synced
 	sleep 10
-
-	aws --region $S3_REGION s3 cp runs/ $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --recursive --no-progress
-	aws --region $S3_REGION s3 cp run_trainer.py  $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --no-progress
+        if [ -e runs/FINISHED ]; then
+	    aws --region $S3_REGION s3 cp runs/ $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --recursive --no-progress
+	    aws --region $S3_REGION s3 cp run_trainer.py  $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --no-progress
+        fi
 
 	#aws --region $S3_REGION s3 rm $S3_BUCKET/runs/$RUN_DIRECTORY/ --recursive
         save_log_and_shutdown
