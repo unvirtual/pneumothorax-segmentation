@@ -33,7 +33,13 @@ def main(name=None):
     print("Using device: %s" % device)
 
     siim_df_filename = "full_metadata_df.pkl"
-    df = dl.SIIMDataFrame(pd.read_pickle(siim_df_filename))
+    if os.path.exists(siim_df_filename):
+        print("Using existing metadata file")
+        df = dl.SIIMDataFrame(pd.read_pickle(siim_df_filename))
+    else:
+        print("Creating metadata file")
+        df = dl.SIIMDataFrame.from_dirs("data-original", "data-original/train-rle.csv")
+        df.to_pickle(siim_df_filename)
 
     print("loading done")
 
