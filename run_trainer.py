@@ -25,7 +25,8 @@ SAMPLE_FRAC= 0.5
 EVAL_VAL = True
 EVAL_TRAIN = False
 
-preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
+#preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
+preprocess_input = get_preprocessing_fn("resnet34", pretrained="imagenet")
 
 def main(name=None):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -51,7 +52,8 @@ def main(name=None):
 
     train_transforms = augmentations.get_augmentations()
 
-    model = ResUNet("resnet34", pretrained="nearest")
+    #model = ResUNet("resnet34", pretrained="imagenet")
+    model = smp.Unet("resnet34", classes=1, encoder_weights="imagenet", activation="sigmoid")
     optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
     #torch_scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 5e-3, step_size_up=25, step_size_down=15)
     torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=8)
