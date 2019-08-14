@@ -12,9 +12,9 @@ GROUP="ubuntu"
 LOCAL_HOSTNAME=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
 if [[ ${LOCAL_HOSTNAME} =~ .*\.amazonaws\.com ]]
 then
-        echo "This is an EC1 instance ... OK" 
+        echo "This is an EC2 instance ... OK"
 else
-        echo "This is not an EC1 instance, or a reverse-customized one"
+        echo "This is not an EC2 instance, or a reverse-customized one"
 	echo "EXITING"
 	save_log_and_shutdown
 	exit 0
@@ -116,7 +116,7 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 
 	sync_to_s3 "runs" "$S3_BUCKET/runs/$RUN_DIRECTORY/" &
 	sync_to_s3_pid=$!
-	trap 'echo "EXITING: killing sync to S3 loop"; kill "$sync_to_s3_pid"' EXIT 
+	trap 'echo "EXITING: killing sync to S3 loop"; kill "$sync_to_s3_pid"' EXIT
 
 	echo "Running Training ..."
 	sleep 2
