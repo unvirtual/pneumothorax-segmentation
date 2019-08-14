@@ -11,6 +11,8 @@ parser.add_argument("instance", type=str)
 parser.add_argument("runname", type=str)
 parser.add_argument("region", type=str)
 parser.add_argument("--datascript", type=str, default=None)
+parser.add_argument("--s3bucket", type=str, default="s3://dl-data-and-snapshots")
+parser.add_argument("--s3region", type=str, default="eu-central-1")
 parser.add_argument("-no_training_run", action='store_true')
 parser.add_argument("-no_aws_env_setup", action='store_true')
 args = parser.parse_args()
@@ -21,6 +23,9 @@ REGION = args.region
 USER_DATA_FILENAME = args.datascript
 NO_TRAINING_RUN = args.no_training_run
 NO_AWS_ENV_SETUP = args.no_aws_env_setup
+S3_BUCKET = args.s3bucket
+S3_REGION = args.s3region
+
 DRY_RUN = False
 
 print("Starting instance in region", REGION)
@@ -36,7 +41,7 @@ if args.datascript is None and (args.no_training_run or args.no_aws_env_setup):
     print("Exiting...")
     sys.exit(1)
 
-def get_user_data(filename, name, no_training_run, no_aws_env_setup):
+def get_user_data(filename, name, s3_bucket, s3_region, no_training_run, no_aws_env_setup):
     if filename is None:
         print("Using NO User Data Script")
         return ""
@@ -45,6 +50,8 @@ def get_user_data(filename, name, no_training_run, no_aws_env_setup):
     with open(filename, "r") as file:
         script = file.readline()
         script += 'RUN_DIRECTORY="' + name + '"\n'
+        script += 'S3_BUCKET="' + s3_bucket + '"\n'
+        script += 'S3_REGION="' + s3_region + '"\n'
         if no_training_run:
             script += 'NO_TRAINING_RUN=1\n'
         if no_aws_env_setup:
@@ -198,7 +205,7 @@ response = ec2.request_spot_fleet(
                 'Monitoring': {
                     'Enabled': False
                 },
-                'UserData': get_user_data(USER_DATA_FILENAME, RUN_NAME, no_aws_env_setup=NO_AWS_ENV_SETUP, no_training_run=NO_TRAINING_RUN),
+                'UserData': get_user_data(USER_DATA_FILENAME, RUN_NAME, S3_BUCKET, S3_REGION,no_aws_env_setup=NO_AWS_ENV_SETUP, no_training_run=NO_TRAINING_RUN),
                 'TagSpecifications': [{
                     "ResourceType": "instance",
                     'Tags': [

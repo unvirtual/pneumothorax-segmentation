@@ -4,8 +4,6 @@ USER_HOME="/home/ubuntu"
 ROOT_HOME="/root"
 WORK_DIR="pneumothorax-segmentation"
 REPO="unvirtual/pneumothorax-segmentation.git"
-S3_BUCKET="s3://dl-data-and-snapshots"
-S3_REGION="eu-central-1"
 USER="ubuntu"
 GROUP="ubuntu"
 
@@ -36,7 +34,17 @@ save_log_and_shutdown() {
 	shutdown now
 }
 
+if [ -z "$S3_BUCKET" ]; then
+	echo "ERROR: S3_BUCKET not defined. EXITING"
+	save_log_and_shutdown
+	exit 1
+fi
 
+if [ -z "$S3_REGION" ]; then
+	echo "ERROR: S3_REGION not defined. EXITING"
+	save_log_and_shutdown
+	exit 1
+fi
 
 if [ -z "$RUN_DIRECTORY" ]; then
 	echo "ERROR: RUN_DIRECTORY not defined. EXITING"
@@ -123,7 +131,7 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 
 	echo "Running Training ..."
 	sleep 2
-        sudo -H -u ubuntu bash -c "tmux new-session -d -s dl-session 'source /home/ubuntu/anaconda3/bin/activate pytorch_p36; python run_trainer.py; tmux wait-for -S finished; ' \; pipe-pane -o 'cat > /home/ubuntu/pneumothorax-segmentation/log' \; wait-for finished"
+        sudo -H -u ubuntu bash -c "tmux new-session -d -s dl-session 'source /home/ubuntu/anaconda3/bin/activate pytorch_p36; python run_trainer.py; tmux wait-for -S finished; ' \; pipe-pane -o 'cat > /home/ubuntu/pneumothorax-segmentation/runs/log' \; wait-for finished"
 
 	# wait for files to be synced
 	sleep 10
