@@ -135,6 +135,7 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 
 	# wait for files to be synced
 	sleep 10
+        aws --region $S3_REGION s3 cp full_metadata_df.pkl  $S3_BUCKET/ --no-progress
         if [ -e runs/FINISHED ]; then
 	    aws --region $S3_REGION s3 cp runs/ $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --recursive --no-progress
 	    aws --region $S3_REGION s3 cp run_trainer.py  $S3_BUCKET/finished_runs/$RUN_DIRECTORY/ --no-progress
