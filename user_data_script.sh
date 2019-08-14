@@ -7,7 +7,7 @@ REPO="unvirtual/pneumothorax-segmentation.git"
 USER="ubuntu"
 GROUP="ubuntu"
 
-AVAIL_ZONE=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
+AVAIL_ZONE=$(curl http://169.254.169.254/latest/meta-data/placement/availability-zone)
 REGION=$(echo "$AVAIL_ZONE" | sed 's/[a-z]$//')
 
 LOCAL_HOSTNAME=$(curl http://169.254.169.254/latest/meta-data/public-hostname)
