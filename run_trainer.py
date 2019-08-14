@@ -56,7 +56,7 @@ def main(name=None):
     #torch_scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 5e-3, step_size_up=25, step_size_down=15)
     torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=8)
 
-    scheduler = Scheduler(torch_scheduler)
+    scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
     
     model = model.to(device)
 
