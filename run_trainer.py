@@ -14,7 +14,7 @@ from model import *
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
-EPOCHS = 20
+EPOCHS = 15
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
@@ -61,10 +61,10 @@ def main(name=None):
     model = ResUNetPlusPlus("resnet34", pretrained="imagenet")
 
     #model = smp.Unet("resnet34", classes=1, encoder_weights="imagenet", activation="sigmoid")
-    optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=2e-3, momentum=0.9)
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
     #torch_scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 5e-3, step_size_up=25, step_size_down=15)
-    torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=8)
+    torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, mode="max")
 
     scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
 
