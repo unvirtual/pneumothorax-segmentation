@@ -29,8 +29,15 @@ preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained=
 #preprocess_input = get_preprocessing_fn("resnet34", pretrained="imagenet")
 
 def main(name=None):
+    global TRAIN_BS, VAL_BS
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print("Using device: %s" % device)
+    n_devices = torch.cuda.device_count()
+    if n_devices > 1:
+        print("found multiple GPUs:", n_devices)
+        TRAIN_BS = n_devices*TRAIN_BS
+        VAL_BS = n_devices*VAL_BS
+        print("scaling batch sizes:", TRAIN_BS, VAL_BS)
 
     siim_df_filename = "full_metadata_df.pkl"
     if os.path.exists(siim_df_filename):
@@ -59,6 +66,7 @@ def main(name=None):
     train_transforms = augmentations.get_augmentations()
 
     model = ResUNetPlusPlus("resnet34", pretrained="imagenet")
+
     #model = smp.Unet("resnet34", classes=1, encoder_weights="imagenet", activation="sigmoid")
     optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
@@ -67,8 +75,9 @@ def main(name=None):
 
     scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
 
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
     model = model.to(device)
-
 
     from_checkpoint = Trainer.checkpoint_exists(name)
 
