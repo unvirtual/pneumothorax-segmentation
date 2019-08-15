@@ -212,7 +212,10 @@ class Trainer:
     def from_checkpoint(cls, name, checkpoint, loaders, device, newname=None):
         start_epoch = checkpoint.last_epoch + 1
         epochs = checkpoint.total_epochs
-        freeze_encoder_epochs = checkpoint.aux["freeze_encoder_epochs"]
+        if checkpoint.aux is not None:
+            freeze_encoder_epochs = checkpoint.aux["freeze_encoder_epochs"]
+        else:
+            freeze_encoder_epochs = []
 
         instance = cls(name, checkpoint.model, checkpoint.optimizer, 
                 epochs, loaders, scheduler=checkpoint.scheduler,
