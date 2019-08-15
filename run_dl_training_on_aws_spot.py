@@ -13,6 +13,7 @@ parser.add_argument("region", type=str)
 parser.add_argument("--datascript", type=str, default=None)
 parser.add_argument("--s3bucket", type=str, default="s3://dl-data-and-snapshots")
 parser.add_argument("--s3region", type=str, default="eu-central-1")
+parser.add_argument("--setup_from_run", type=str, default=None)
 parser.add_argument("-no_training_run", action='store_true')
 parser.add_argument("-no_aws_env_setup", action='store_true')
 args = parser.parse_args()
@@ -25,6 +26,7 @@ NO_TRAINING_RUN = args.no_training_run
 NO_AWS_ENV_SETUP = args.no_aws_env_setup
 S3_BUCKET = args.s3bucket
 S3_REGION = args.s3region
+SETUP_FROM_RUN = args.setup_from_run
 
 DRY_RUN = False
 
@@ -41,7 +43,7 @@ if args.datascript is None and (args.no_training_run or args.no_aws_env_setup):
     print("Exiting...")
     sys.exit(1)
 
-def get_user_data(filename, name, s3_bucket, s3_region, no_training_run, no_aws_env_setup):
+def get_user_data(filename, name, s3_bucket, s3_region, no_training_run, no_aws_env_setup, setup_from_run):
     if filename is None:
         print("Using NO User Data Script")
         return ""
@@ -52,11 +54,14 @@ def get_user_data(filename, name, s3_bucket, s3_region, no_training_run, no_aws_
         script += 'RUN_DIRECTORY="' + name + '"\n'
         script += 'S3_BUCKET="' + s3_bucket + '"\n'
         script += 'S3_REGION="' + s3_region + '"\n'
+        if setup_from_run is not None:
+            script += 'START_FROM_FINISHED_DIR="' + setup_from_run + '"\n'
         if no_training_run:
             script += 'NO_TRAINING_RUN=1\n'
         if no_aws_env_setup:
             script += 'NO_AWS_ENV_SETUP=1\n'
         script += file.read()
+    print(script)
     return base64.b64encode(script.encode('ascii')).decode('utf-8')
 
 def abort_on_running_instance(ec2):
@@ -205,7 +210,7 @@ response = ec2.request_spot_fleet(
                 'Monitoring': {
                     'Enabled': False
                 },
-                'UserData': get_user_data(USER_DATA_FILENAME, RUN_NAME, S3_BUCKET, S3_REGION,no_aws_env_setup=NO_AWS_ENV_SETUP, no_training_run=NO_TRAINING_RUN),
+                'UserData': get_user_data(USER_DATA_FILENAME, RUN_NAME, S3_BUCKET, S3_REGION,no_aws_env_setup=NO_AWS_ENV_SETUP, no_training_run=NO_TRAINING_RUN, setup_from_run=SETUP_FROM_RUN),
                 'TagSpecifications': [{
                     "ResourceType": "instance",
                     'Tags': [

@@ -110,13 +110,15 @@ if [ -z "$NO_TRAINING_RUN" ]; then
 		aws --region $S3_REGION s3 cp "$S3_BUCKET"/runs/$RUN_DIRECTORY runs --recursive --no-progress
 	else
 		if [ -n "$START_FROM_FINISHED_DIR" ]; then
+                        mkdir setup_checkpoint
 			finished_dir_exists_on_s3=$(aws --region $S3_REGION s3 ls $S3_BUCKET/finished_runs/"$START_FROM_FINISHED_DIR")
 			if [ -z "$finished_dir_exists_on_s3" ]; then
 				echo "ERROR: $S3_BUCKET/finished_runs/$START_FROM_FINISHED_DIR not found"
 				save_log_and_shutdown
 				exit 1
 			fi
-			aws --region $S3_REGION s3 cp $S3_BUCKET/finished_runs/$START_FROM_FINISHED_DIR runs --recursive --no-progress
+			aws --region $S3_REGION s3 cp $S3_BUCKET/finished_runs/$START_FROM_FINISHED_DIR setup_checkpoint --recursive --no-progress
+	                chown -R $USER:$GROUP $USER_HOME/$WORK_DIR/setup_checkpoint
 			echo "This run starts from snapshots in finished_runs/$START_FROM_FINISHED_DIR"
 		else
 			echo "Run dir $RUN_DIRECTORY on S3 NOT found. This is a new run"

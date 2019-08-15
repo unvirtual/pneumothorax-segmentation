@@ -18,15 +18,18 @@ EPOCHS = 20
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
+
 IMGSIZE = 256
 IN_CHANNELS = 3
 VAL_SPLIT = 0.2
 SAMPLE_FRAC=1
 EVAL_VAL = True
 EVAL_TRAIN = False
+SETUP_DIR="setup_checkpoint"
 
 preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
 #preprocess_input = get_preprocessing_fn("resnet34", pretrained="imagenet")
+
 
 def main(name=None):
     global TRAIN_BS, VAL_BS
@@ -53,16 +56,6 @@ def main(name=None):
     train, val = df.train_val_split(VAL_SPLIT, stratify=False,
                                     sample_frac=SAMPLE_FRAC)
 
-    print("train set:")
-    print("   images   : ", train.shape[0])
-    print("   positives: ", train["HasMask"].sum())
-    print("   negatives: ", (~train["HasMask"]).sum())
-    print("val set:")
-    print("   images   : ", val.shape[0])
-    print("   positives: ", val["HasMask"].sum())
-    print("   negatives: ", (~val["HasMask"]).sum())
-
-
     train_transforms = augmentations.get_augmentations()
 
     model = ResUNetPlusPlus("resnet34", pretrained="imagenet")
@@ -80,10 +73,22 @@ def main(name=None):
     model = model.to(device)
 
     from_checkpoint = Trainer.checkpoint_exists(name)
+    from_setup = os.path.exists(SETUP_DIR+ "/last_checkpoint.pth")
 
     if from_checkpoint:
+        print("RESUMING training from checkpoint")
         checkpoint_filename = Trainer.last_checkpoint_path(name)
         checkpoint = cp.CheckPoint.load(checkpoint_filename, model, optimizer=optimizer, scheduler=scheduler, device=device)
+    elif from_setup:
+        print("INITIALIZING NEW training from setup checkpoint")
+        checkpoint_filename = SETUP_DIR + "/last_checkpoint.pth"
+        checkpoint = cp.CheckPoint.load(checkpoint_filename, model, optimizer=None, scheduler=None, device=device)
+        checkpoint.scheduler = scheduler
+        checkpoint.optimizer = optimizer
+    else:
+        print("STARTING NEW training")
+
+    if from_checkpoint or from_setup:
         train = checkpoint.train_df
         val = checkpoint.val_df
 
@@ -93,12 +98,29 @@ def main(name=None):
 
     print("input image shape: ", train_ds.__getitem__(0)[0].shape)
     print("mask shape:        ", train_ds.__getitem__(0)[1].shape)
+    print()
+    print("train set:")
+    print("   images   : ", train.shape[0])
+    print("   positives: ", train["HasMask"].sum())
+    print("   negatives: ", (~train["HasMask"]).sum())
+    print("val set:")
+    print("   images   : ", val.shape[0])
+    print("   positives: ", val["HasMask"].sum())
+    print("   negatives: ", (~val["HasMask"]).sum())
+    print()
 
     loaders = DataLoaders(train_ds, val_ds, TRAIN_BS, VAL_BS)
 
     if from_checkpoint:
+        print("Resuming Trainer ...")
         trainer = Trainer.from_checkpoint(name, checkpoint, loaders, device=device)
+    elif from_setup:
+        print("Initializing Trainer from setup checkpoint...")
+        trainer = Trainer.from_checkpoint(name, checkpoint, loaders, device=device)
+        trainer.epochs = EPOCHS + trainer.start_epoch
+        trainer.freeze_encoder_epochs = FREEZE_ENCODER_EPOCHS
     else:
+        print("Starting Trainer ...")
         trainer = Trainer(name, model, optimizer, EPOCHS, loaders, scheduler=scheduler, device=device, freeze_encoder_epochs=FREEZE_ENCODER_EPOCHS)
 
     trainer.train()
