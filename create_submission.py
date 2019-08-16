@@ -8,9 +8,9 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from checkpoint import *
+from mask_utils import mask2rle
 
-from multiprocessing import Pool, cpu_count
-import os
+from model import *
 
 from multiprocessing import Pool, cpu_count
 import os
@@ -71,10 +71,12 @@ DEV = "cpu"
 def predict_rles(model, encoder, pretrained, directory, thr, min_pix, img_size):
     results = []
     model = model.to(DEV)
-    preprocess_input = get_preprocessing_fn(encoder, pretrained=pretrained)
+
+    preprocess_input = ResNetModel.input_preprocess_function(encoder, pretrained=pretrained)
     
     print("Loading images from", directory)
     df = SIIMDataFrame.from_dirs(directory, labels_file=None).get_siim_dataframe()
+
     ds = SIIMDataSet(df, img_size, 3, preproc=preprocess_input, has_labels=False)
 
     pool = Pool(cpu_count())
@@ -97,7 +99,7 @@ def predict_rles(model, encoder, pretrained, directory, thr, min_pix, img_size):
 if __name__ == "__main__":
     print("No. of CPUs:", cpu_count())
     print("batch size: ", BATCHSIZE)
-    model = smp.Unet("resnet34", classes=1, encoder_weights="imagenet", activation="sigmoid")
-    cp = CheckPoint.load("unet_resnet34_512_one_cycle_then_constant_last_cp.pth", model, device=DEV)
-    results = predict_rles(cp.get_model(), "resnet34", "imagenet", "data-original/dicom-images-test", 0.65, 50, 512)
-    pd.DataFrame(results, columns=["ImageId","EncodedPixels"]).to_csv("submission_newest_512.csv", index=False)
+    model = ResUNetPlusPlus("resnet34", pretrained="imagenet")
+    cp = CheckPoint.load("eval/UResNet++34D_256x256_SGD_ROP_NoInterpolation_r2/last_checkpoint.pth", model, device=DEV)
+    results = predict_rles(cp.model, "resnet34", "imagenet", "data-original/dicom-images-test", 0.75, 25, 256)
+    pd.DataFrame(results, columns=["ImageId","EncodedPixels"]).to_csv("submission_uresnet34++_256.csv", index=False)
