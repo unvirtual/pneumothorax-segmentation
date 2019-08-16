@@ -16,8 +16,8 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
 EPOCHS = 30
 FREEZE_ENCODER_EPOCHS = []
-TRAIN_BS = 20
-VAL_BS = 20
+TRAIN_BS = 15
+VAL_BS = 15
 
 IMGSIZE = 512
 IN_CHANNELS = 3
