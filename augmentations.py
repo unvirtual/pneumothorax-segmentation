@@ -19,8 +19,8 @@ def get_augmentations():
         ),
         album.OneOf(
             [
-                album.RandomContrast(p=1)
-                albu.HueSaturationValue(p=1),
+                album.RandomContrast(p=1),
+                album.HueSaturationValue(p=1),
             ],
             p=0.5,
         )
