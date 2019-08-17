@@ -4,7 +4,7 @@ def get_augmentations():
     transforms = [
         album.HorizontalFlip(p=0.5),
     
-        album.ShiftScaleRotate(scale_limit=0.2, rotate_limit=0.2, shift_limit=0.1, p=1, border_mode=0),
+        album.ShiftScaleRotate(scale_limit=0.2, rotate_limit=10, shift_limit=0.1, p=1, border_mode=0),
     
         album.IAAAdditiveGaussianNoise(p=0.2),
         album.IAAPerspective(p=0.2),
@@ -20,7 +20,7 @@ def get_augmentations():
         album.OneOf(
             [
                 album.RandomContrast(p=1)
-    #            albu.HueSaturationValue(p=1),
+                albu.HueSaturationValue(p=1),
             ],
             p=0.5,
         )
