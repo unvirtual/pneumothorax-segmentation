@@ -14,12 +14,12 @@ from model import *
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
-EPOCHS = 40
+EPOCHS = 70
 FREEZE_ENCODER_EPOCHS = []
-TRAIN_BS = 15
-VAL_BS = 15
+TRAIN_BS = 32
+VAL_BS = 32
 
-IMGSIZE = 512
+IMGSIZE = 256
 IN_CHANNELS = 3
 VAL_SPLIT = 0.2
 SAMPLE_FRAC=1
@@ -27,9 +27,8 @@ EVAL_VAL = True
 EVAL_TRAIN = False
 SETUP_DIR="setup_checkpoint"
 
-#preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
-#preprocess_input = get_preprocessing_fn("resnet34", pretrained="imagenet")
-preprocess_input = None
+preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
+#preprocess_input = None
 
 
 def main(name=None):
@@ -59,16 +58,14 @@ def main(name=None):
 
     train_transforms = augmentations.get_augmentations()
 
-    model = ResUNetPlusPlus("resnet34", pretrained="imagenet")
+    model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None)
 
-    #model = smp.Unet("resnet34", classes=1, encoder_weights="imagenet", activation="sigmoid")
-    optimizer = optim.SGD(model.parameters(), lr=8e-3, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
     #torch_scheduler = optim.lr_scheduler.CyclicLR(optimizer, 5e-4, 1e-2, step_size_up=10, step_size_down=20)
     torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=3, mode="max")
 
     scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
-    #scheduler = Scheduler(torch_scheduler)
 
     if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)

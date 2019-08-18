@@ -72,7 +72,8 @@ def predict_rles(model, encoder, pretrained, directory, thr, min_pix, img_size):
     results = []
     model = model.to(DEV)
 
-    preprocess_input = ResNetModel.input_preprocess_function(encoder, pretrained=pretrained)
+    #preprocess_input = ResNetModel.input_preprocess_function(encoder, pretrained=pretrained)
+    preprocess_input = None
     
     print("Loading images from", directory)
     df = SIIMDataFrame.from_dirs(directory, labels_file=None).get_siim_dataframe()
@@ -100,6 +101,6 @@ if __name__ == "__main__":
     print("No. of CPUs:", cpu_count())
     print("batch size: ", BATCHSIZE)
     model = ResUNetPlusPlus("resnet34", pretrained="imagenet")
-    cp = CheckPoint.load("eval/UResNet++34D_256x256_SGD_ROP_NoPreprocessing_r2/last_checkpoint.pth", model, device=DEV)
-    results = predict_rles(cp.model, "resnet34", "imagenet", "data-original/dicom-images-test", 0.8, 50, 256)
-    pd.DataFrame(results, columns=["ImageId","EncodedPixels"]).to_csv("submission_uresnet34++_256_nopreproc_r2.csv", index=False)
+    cp = CheckPoint.load("eval/UResNet++34D_512x512_SGD_ROP_NoPreprocessing_r1/last_checkpoint.pth", model, device=DEV)
+    results = predict_rles(cp.model, "resnet34", "imagenet", "data-original/dicom-images-test", 0.8, 150, 512)
+    pd.DataFrame(results, columns=["ImageId","EncodedPixels"]).to_csv("submission_uresnet34++_512_nopreproc_r1.csv", index=False)
