@@ -14,12 +14,12 @@ from model import *
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
-EPOCHS = 15
+EPOCHS = 40
 FREEZE_ENCODER_EPOCHS = []
-TRAIN_BS = 15
-VAL_BS = 15
+TRAIN_BS = 32
+VAL_BS = 32
 
-IMGSIZE = 512
+IMGSIZE = 256
 IN_CHANNELS = 3
 VAL_SPLIT = 0.2
 SAMPLE_FRAC=1
@@ -27,8 +27,9 @@ EVAL_VAL = True
 EVAL_TRAIN = False
 SETUP_DIR="setup_checkpoint"
 
-preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
+#preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
 #preprocess_input = get_preprocessing_fn("resnet34", pretrained="imagenet")
+preprocess_input = None
 
 
 def main(name=None):
