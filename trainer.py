@@ -71,6 +71,11 @@ class Trainer:
         self.loaders = loaders
         self.train_loader = self.loaders.loaders()["train"]
         self.val_loader = self.loaders.loaders()["val"]
+
+        self.swa_enabled = False
+        self.swa_start = None
+        self.swa_freq  = None
+
         self._setup()
 
     def _setup(self):
@@ -114,12 +119,20 @@ class Trainer:
             p.requires_grad = True
         self.encoder_frozen = False
 
-    def _save_checkpoints(self, epoch, train_logs, valid_logs):
-        model_improved = False
+    def _get_aux_for_checkpoint(self):
+        aux = { "swa":
+                {"swa_enabled": self.swa_enabled,
+                 "swa_freq": self.swa_freq,
+                 "swa_start": self.swa_start}
+              }
+
         if len(self.freeze_encoder_epochs) > 0:
             aux = {"freeze_encoder_epochs": self.freeze_encoder_epochs}
-        else:
-            aux = None
+        return aux
+
+    def _save_checkpoints(self, epoch, train_logs, valid_logs):
+        model_improved = False
+        aux = self._get_aux_for_checkpoint()
 
         dataframes = self.loaders.dataframes()
 
@@ -139,6 +152,17 @@ class Trainer:
                              aux=aux)
 
         return model_improved
+
+    def save_checkpoint(self, filename):
+        aux = self._get_aux_for_checkpoint()
+
+        dataframes = self.loaders.dataframes()
+
+        checkpoint = cp.CheckPoint("Custom", self.epochs)
+        checkpoint.save(filename, self.epochs, self.model,
+                             self.optimizer, self.history, scheduler=self.scheduler,
+                             train_df=dataframes["train"], val_df=dataframes["val"],
+                             aux=aux)
 
     def _train_epoch(self):
         train_logs = self.train_epoch.run(self.train_loader)
@@ -180,23 +204,53 @@ class Trainer:
 
             train_logs, valid_logs = self._train_epoch()
             self._update_history(train_logs, valid_logs)
+
             improved = self._save_checkpoints(i, train_logs, valid_logs)
             if improved:
                 print('Model improved, checkpoint saved!')
+
+            if self.swa_enabled:
+                print("SWA enabled")
+                for j in range(i, self.epochs):
+                    if _swa_averaging_epoch(j):
+                        print("next SWA averaging at epoch", j+1)
+                        break
+                if _swa_averaging_epoch(i):
+                    print("SWA: averaging weights")
+                    self.optimizer.update_swa()
+
+    def _swa_averaging_epoch(self, i):
+        return (i >= self.swa_start) and
+               ((i - self.swa_start - 1) % self.swa_freq == 0)
+
+    def enable_swa(self, swa_start, swa_freq):
+        self.swa_enabled = True
+        self.swa_start = swa_start
+        self.swa_freq = swa_freq
+
+    def finalize_swa(self):
+        self.optimizer.swap_swa_sgd()
+        self.optimizer.bn_update(self.train_loader, self.model)
 
     @classmethod
     def from_checkpoint(cls, name, checkpoint, loaders, device, newname=None):
         start_epoch = checkpoint.last_epoch + 1
         epochs = checkpoint.total_epochs
-        if checkpoint.aux is not None:
+
+        if "freeze_encoder_epochs" in checkpoint.aux:
             freeze_encoder_epochs = checkpoint.aux["freeze_encoder_epochs"]
         else:
             freeze_encoder_epochs = []
 
-        instance = cls(name, checkpoint.model, checkpoint.optimizer, 
+        instance = cls(name, checkpoint.model, checkpoint.optimizer,
                 epochs, loaders, scheduler=checkpoint.scheduler,
                 freeze_encoder_epochs=freeze_encoder_epochs, device=device,
                 new_run_dir=False)
+
+        swa_cp = checkpoint.aux["swa"]
+        instance.swa_enabled = swa_cp["swa_enabled"]
+        instance.swa_start = swa_cp["swa_start"]
+        instance.swa_freq = swa_cp["swa_freq"]
 
         instance.start_epoch = start_epoch
         instance.history = checkpoint.history
