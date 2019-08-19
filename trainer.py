@@ -212,10 +212,10 @@ class Trainer:
             if self.swa_enabled:
                 print("SWA enabled")
                 for j in range(i, self.epochs):
-                    if _swa_averaging_epoch(j):
+                    if self._swa_averaging_epoch(j):
                         print("next SWA averaging at epoch", j+1)
                         break
-                if _swa_averaging_epoch(i):
+                if self._swa_averaging_epoch(i):
                     print("SWA: averaging weights")
                     self.optimizer.update_swa()
 
