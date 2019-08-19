@@ -328,9 +328,9 @@ def ResUNet(resnet, pretrained=None, interpolate="nearest"):
     decoder = UNetDecoder((512,256,128,64,64), interpolate)
     return SegmentationModel(encoder, decoder)
 
-def ResUNetPlusPlus(resnet, pretrained=None, interpolate="nearest"):
+def ResUNetPlusPlus(resnet, pretrained=None, interpolate="nearest", dropout=None):
     encoder = getattr(ResNetModel, resnet)(pretrained)
-    decoder = UNetPlusPlusDecoder((512,256,128,64,64), interpolate)
+    decoder = UNetPlusPlusDecoder((512,256,128,64,64), interpolate, dropout=dropout)
     return SegmentationModel(encoder, decoder)
 
 class SegmentationModel(ModelBase):
