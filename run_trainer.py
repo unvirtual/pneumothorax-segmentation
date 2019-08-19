@@ -27,8 +27,8 @@ EVAL_VAL = True
 EVAL_TRAIN = False
 SETUP_DIR="setup_checkpoint"
 
-#preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
-preprocess_input = None
+preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
+#preprocess_input = None
 
 
 def main(name=None):
