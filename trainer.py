@@ -6,35 +6,11 @@ import data_loader as dl
 import checkpoint as cp
 import augmentations as augmentations
 import pandas as pd
+from scheduler import *
 
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
-
-class Scheduler:
-    def __init__(self, scheduler, step_criterion=None, step_log=None):
-        self.scheduler = scheduler
-        self.step_criterion = step_criterion
-        self.step_log = step_log
-
-    def step(self, train_log, val_log):
-        if self.step_log == "val":
-            self.scheduler.step(val_log[self.step_criterion])
-        elif self.step_log == "train":
-            self.scheduler.step(train_log[self.step_criterion])
-        elif self.step_log == None:
-            self.scheduler.step()
-
-    def state_dict(self):
-        return {"state_dict": self.scheduler.state_dict(),
-                "step_criterion": self.step_criterion,
-                "step_log": self.step_log}
-
-    def load_state_dict(self, state_dict):
-        self.scheduler.load_state_dict(state_dict["state_dict"])
-        self.step_criterion = state_dict["step_criterion"]
-        self.step_log = state_dict["step_log"]
-        return self
 
 class DataLoaders:
     def __init__(self, train_ds, val_ds, train_bs, val_bs, train_workers=12, val_workers=4):
