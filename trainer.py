@@ -220,8 +220,7 @@ class Trainer:
                     self.optimizer.update_swa()
 
     def _swa_averaging_epoch(self, i):
-        return (i >= self.swa_start) and
-               ((i - self.swa_start - 1) % self.swa_freq == 0)
+        return (i >= self.swa_start) and ((i - self.swa_start - 1) % self.swa_freq == 0)
 
     def enable_swa(self, swa_start, swa_freq):
         self.swa_enabled = True
