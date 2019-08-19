@@ -18,7 +18,7 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
 from torchcontrib.optim import SWA
 
-EPOCHS = 25
+EPOCHS = 65
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
@@ -26,18 +26,17 @@ VAL_BS = 32
 IMGSIZE = 256
 IN_CHANNELS = 3
 VAL_SPLIT = 0.2
-SAMPLE_FRAC=0.001
+SAMPLE_FRAC= 1
 EVAL_VAL = True
 EVAL_TRAIN = False
 SETUP_DIR="setup_checkpoint"
 
 ENABLE_SWA = True
-SWA_START=3
-SWA_FREQ=5
-SWA_LR=0.05
+SWA_PRERUN = 5
+SWA_FREQ = 10
 
-preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
-#preprocess_input = None
+#preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
+preprocess_input = None
 
 def main(name=None):
     global TRAIN_BS, VAL_BS
@@ -66,16 +65,16 @@ def main(name=None):
 
     train_transforms = augmentations.get_augmentations()
 
-    model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None, dropout=0.5)
+    model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None)
 
-    optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=5e-2, momentum=0.9)
 
     if ENABLE_SWA:
-        print("Enabling SWA. Start: %d, Freq: %d" % (SWA_START, SWA_FREQ))
+        print("Enabling SWA. Start: %d, Freq: %d" % (SWA_PRERUN, SWA_FREQ))
         optimizer = SWA(optimizer)
 
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
-    torch_scheduler = SWAScheduler(optimizer, SWA_START, 0.1, SWA_FREQ, 0.05, 0.01)
+    torch_scheduler = SWAScheduler(optimizer, SWA_PRERUN, 0.05, SWA_FREQ, 0.01, 0.0001)
     #torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=3, mode="max")
 
     #scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
@@ -110,7 +109,7 @@ def main(name=None):
             if "swa" not in checkpoint.aux:
                 checkpoint.aux["swa"] = {}
             checkpoint.aux["swa"]["swa_enabled"] = True
-            checkpoint.aux["swa"]["swa_start"] = SWA_START
+            checkpoint.aux["swa"]["swa_start"] = SWA_PRERUN
             checkpoint.aux["swa"]["swa_freq"] = SWA_FREQ
     else:
         print("STARTING NEW training")
@@ -150,7 +149,7 @@ def main(name=None):
         print("Starting Trainer ...")
         trainer = Trainer(name, model, optimizer, EPOCHS, loaders, scheduler=scheduler, device=device, freeze_encoder_epochs=FREEZE_ENCODER_EPOCHS)
         if ENABLE_SWA:
-            trainer.enable_swa(SWA_START, SWA_FREQ)
+            trainer.enable_swa(SWA_PRERUN, SWA_FREQ)
 
     trainer.train()
     if ENABLE_SWA:
