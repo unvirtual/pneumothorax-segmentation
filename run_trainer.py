@@ -14,7 +14,7 @@ from model import *
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
-EPOCHS = 70
+EPOCHS = 40
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
@@ -58,7 +58,7 @@ def main(name=None):
 
     train_transforms = augmentations.get_augmentations()
 
-    model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None)
+    model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None, dropout=0.5)
 
     optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
