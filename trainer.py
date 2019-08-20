@@ -229,7 +229,7 @@ class Trainer:
 
     def finalize_swa(self):
         self.optimizer.swap_swa_sgd()
-        self.optimizer.bn_update(self.train_loader, self.model)
+        self.optimizer.bn_update(self.train_loader, self.model, device=self.device)
 
     @classmethod
     def from_checkpoint(cls, name, checkpoint, loaders, device, newname=None):
