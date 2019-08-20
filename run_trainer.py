@@ -18,7 +18,7 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
 from torchcontrib.optim import SWA
 
-EPOCHS = 65
+EPOCHS = 95
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
@@ -32,7 +32,7 @@ EVAL_TRAIN = False
 SETUP_DIR="setup_checkpoint"
 
 ENABLE_SWA = True
-SWA_PRERUN = 5
+SWA_PRERUN = 15
 SWA_FREQ = 10
 
 #preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
@@ -67,14 +67,14 @@ def main(name=None):
 
     model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None)
 
-    optimizer = optim.SGD(model.parameters(), lr=5e-2, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=5e-2, momentum=0.9, nesterov=True)
 
     if ENABLE_SWA:
         print("Enabling SWA. Start: %d, Freq: %d" % (SWA_PRERUN, SWA_FREQ))
         optimizer = SWA(optimizer)
 
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
-    torch_scheduler = SWAScheduler(optimizer, SWA_PRERUN, 0.05, SWA_FREQ, 0.01, 0.0001)
+    torch_scheduler = SWAScheduler(optimizer, SWA_PRERUN, 0.01, SWA_FREQ, 0.001, 0.00001)
     #torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=3, mode="max")
 
     #scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
