@@ -2,3 +2,9 @@ data/*
 *.pkl
 *.pth
 WIP/*
+__pycache__/*
+*/__pycache__/*
+*.csv
+*log
+*.ipynb
+data-original/
