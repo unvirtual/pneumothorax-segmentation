@@ -20,8 +20,8 @@ from torchcontrib.optim import SWA
 
 EPOCHS = 30
 FREEZE_ENCODER_EPOCHS = []
-TRAIN_BS = 32
-VAL_BS = 32
+TRAIN_BS = 20
+VAL_BS = 20
 
 IMGSIZE = 256
 IN_CHANNELS = 3
