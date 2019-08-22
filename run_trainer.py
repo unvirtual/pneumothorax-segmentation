@@ -18,20 +18,20 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
 from torchcontrib.optim import SWA
 
-EPOCHS = 10
+EPOCHS = 30
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
 
 IMGSIZE = 256
 IN_CHANNELS = 3
-VAL_SPLIT = 0.2
+VAL_SPLIT = 0.15
 SAMPLE_FRAC= 1
 EVAL_VAL = True
 EVAL_TRAIN = False
 SETUP_DIR="setup_checkpoint"
 
-ENABLE_SWA = True
+ENABLE_SWA = False
 SWA_PRERUN = 15
 SWA_FREQ = 10
 
@@ -65,20 +65,20 @@ def main(name=None):
 
     train_transforms = augmentations.get_augmentations()
 
-    model = sm.ResUNetPlusPlus("resnet34_encoder", pretrained="imagenet", interpolate=None, decoder_type="default", dropout=None)
+    model = sm.EffUNetPlusPlus("effnet_b4_encoder", pretrained=None, interpolate=None, decoder_type="residual", dropout=0.1)
 
-    optimizer = optim.SGD(model.parameters(), lr=5e-2, momentum=0.9, nesterov=True)
+    optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9, nesterov=True)
 
     if ENABLE_SWA:
         print("Enabling SWA. Start: %d, Freq: %d" % (SWA_PRERUN, SWA_FREQ))
         optimizer = SWA(optimizer)
 
     #optimizer = optim.Adam(model.parameters(), lr=5e-3)
-    torch_scheduler = SWAScheduler(optimizer, SWA_PRERUN, 0.01, SWA_FREQ, 0.001, 0.00001)
-    #torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=3, mode="max")
+    #torch_scheduler = SWAScheduler(optimizer, SWA_PRERUN, 0.01, SWA_FREQ, 0.001, 0.00001)
+    torch_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=3, mode="max")
 
-    #scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
-    scheduler = Scheduler(torch_scheduler)
+    scheduler = Scheduler(torch_scheduler, step_criterion="f-score", step_log="val")
+    #scheduler = Scheduler(torch_scheduler)
     #scheduler = None
 
     if torch.cuda.device_count() > 1:
