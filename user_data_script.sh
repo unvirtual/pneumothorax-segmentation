@@ -71,7 +71,7 @@ if [ -z "$NO_AWS_ENV_SETUP" ]; then
 	sudo -H -u ubuntu bash -c "source /home/ubuntu/anaconda3/bin/activate pytorch_p36; \
 	pip install --upgrade pip; \
 	pip install -U scikit-image; \
-	pip install pydicom segmentation-models-pytorch albumentations opencv-python torchcontrib"
+	pip install pydicom segmentation-models-pytorch albumentations opencv-python torchcontrib efficientnet_pytorch"
 	chmod 600 /root/.ssh/id_rsa
 	ssh-keyscan -H github.com >> .ssh/known_hosts
 

@@ -9,7 +9,7 @@ import pandas as pd
 import argparse
 from trainer import Trainer, DataLoaders, Scheduler
 from validator import Validator
-from model import *
+import model.segmentation_models as sm
 from scheduler import *
 import math
 
@@ -18,7 +18,7 @@ from segmentation_models_pytorch.encoders import get_preprocessing_fn
 
 from torchcontrib.optim import SWA
 
-EPOCHS = 95
+EPOCHS = 10
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 32
 VAL_BS = 32
@@ -65,7 +65,7 @@ def main(name=None):
 
     train_transforms = augmentations.get_augmentations()
 
-    model = ResUNetPlusPlus("resnet34", pretrained="imagenet", interpolate=None)
+    model = sm.ResUNetPlusPlus("resnet34_encoder", pretrained="imagenet", interpolate=None, decoder_type="default", dropout=None)
 
     optimizer = optim.SGD(model.parameters(), lr=5e-2, momentum=0.9, nesterov=True)
 
