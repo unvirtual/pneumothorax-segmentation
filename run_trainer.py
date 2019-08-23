@@ -67,7 +67,7 @@ def main(name=None):
 
     model = sm.EffUNetPlusPlus("effnet_b4_encoder", pretrained=None, interpolate=None, decoder_type="residual", dropout=0.1)
 
-    optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9, nesterov=True)
+    optimizer = optim.SGD(model.parameters(), lr=6e-3, momentum=0.9, nesterov=True)
 
     if ENABLE_SWA:
         print("Enabling SWA. Start: %d, Freq: %d" % (SWA_PRERUN, SWA_FREQ))
