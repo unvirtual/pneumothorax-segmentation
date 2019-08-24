@@ -18,7 +18,7 @@ from model.efficientnet import EffNetEncoder
 
 from torchcontrib.optim import SWA
 
-EPOCHS = 60
+EPOCHS = 30
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 20
 VAL_BS = 20

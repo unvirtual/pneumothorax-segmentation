@@ -23,7 +23,7 @@ def EffUNet(effnet, pretrained, dropout, interpolate):
 
 def EffUNetPlusPlus(effnet, pretrained, interpolate, dropout, decoder_type):
     encoder, out_ch = getattr(EffNetEncoder, effnet)(pretrained)
-    decoder = unetpp_decoder.UNetPlusPlusDecoder(out_ch, dec_ch=(128,64,32,16,8), interpolate=interpolate, decoder_type=decoder_type, dropout=dropout)
+    decoder = unetpp_decoder.UNetPlusPlusDecoder(out_ch, dec_ch=(256,128,64,32,16), interpolate=interpolate, decoder_type=decoder_type, dropout=dropout)
     return mb.SegmentationModel(encoder, decoder)
 
 def n_paramters(model):

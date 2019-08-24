@@ -10,7 +10,7 @@ class EffNetEncoder(EfficientNet):
     def __init__(self, *args, **kwargs):        
         super(EffNetEncoder, self).__init__(*args, **kwargs)
         
-        out_ch = 256
+        out_ch = 512
         self.middle_block = nn.Sequential(
                  #nn.MaxPool2d(kernel_size=2),
                  nn.Conv2d(1792, out_ch, kernel_size=3, stride=1, padding=1),
@@ -71,7 +71,7 @@ class EffNetEncoder(EfficientNet):
     @classmethod
     def effnet_b4_encoder(cls, pretrained=None):
         name = "efficientnet-b4"
-        out_ch = (256,160,56,32,24)
+        out_ch = (512,160,56,32,24)
         model = cls._create_effnet_encoder(name, pretrained)
         return (model, out_ch)
     
