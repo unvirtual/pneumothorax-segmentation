@@ -14,11 +14,11 @@ from scheduler import *
 import math
 
 import segmentation_models_pytorch as smp
-from segmentation_models_pytorch.encoders import get_preprocessing_fn
+from model.efficientnet import EffNetEncoder
 
 from torchcontrib.optim import SWA
 
-EPOCHS = 30
+EPOCHS = 60
 FREEZE_ENCODER_EPOCHS = []
 TRAIN_BS = 20
 VAL_BS = 20
@@ -35,8 +35,8 @@ ENABLE_SWA = False
 SWA_PRERUN = 15
 SWA_FREQ = 10
 
-#preprocess_input = ResNetModel.input_preprocess_function("resnet34", pretrained="imagenet")
-preprocess_input = None
+preprocess_input = EffNetEncoder.input_preprocess_function()
+#preprocess_input = None
 
 def main(name=None):
     global TRAIN_BS, VAL_BS
@@ -67,7 +67,7 @@ def main(name=None):
 
     model = sm.EffUNetPlusPlus("effnet_b4_encoder", pretrained=None, interpolate=None, decoder_type="residual", dropout=0.1)
 
-    optimizer = optim.SGD(model.parameters(), lr=6e-3, momentum=0.9, nesterov=True)
+    optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9, nesterov=True)
 
     if ENABLE_SWA:
         print("Enabling SWA. Start: %d, Freq: %d" % (SWA_PRERUN, SWA_FREQ))

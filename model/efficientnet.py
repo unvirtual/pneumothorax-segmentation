@@ -63,7 +63,7 @@ class EffNetEncoder(EfficientNet):
         return model
     
     @staticmethod
-    def input_preprocess_function(name):    
+    def input_preprocess_function():    
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         return functools.partial(normalize_input, mean=mean, std=std)
